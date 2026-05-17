@@ -1,0 +1,39 @@
+name: Validate OpenAPI Specs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "specs/**"
+      - "REFERENCE.yaml"
+      - ".github/workflows/validate-specs.yml"
+  pull_request:
+    paths:
+      - "specs/**"
+      - "REFERENCE.yaml"
+      - ".github/workflows/validate-specs.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate ${{ matrix.spec }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        spec:
+          - specs/v2-swagger.yaml
+          - specs/v3.0-openapi.yaml
+          - specs/v3.1-openapi.yaml
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Redocly lint
+        run: npx --yes @redocly/cli@latest lint "${{ matrix.spec }}" --format=stylish
+
+      - name: Spectral lint (oas ruleset)
+        run: npx --yes @stoplight/spectral-cli@latest lint "${{ matrix.spec }}" --ruleset=spectral:oas --fail-severity=error

@@ -1,0 +1,2388 @@
+# Generated from REFERENCE.yaml — do not edit directly.
+openapi: 3.0.3
+info:
+  title: Task Tracker API
+  description: |
+    Reference fixture API for the ng-openapi client generator. Covers a broad
+    surface area of a SaaS task tracker: authentication, organizations, teams,
+    projects, tasks (with custom fields, dependencies, time tracking), comments
+    with polymorphic authors and reactions, file attachments, notifications,
+    search, reports/exports (binary downloads), webhooks, and audit logging.
+
+    Designed to exercise the full range of OpenAPI features: enums, nullable
+    fields, polymorphism (oneOf + discriminator), recursive types, dictionary
+    types (additionalProperties), binary uploads/downloads with multiple
+    content types, cursor pagination, RFC 7807 problem details, cookies,
+    headers, and merge-patch bodies.
+  version: 2.0.0
+  termsOfService: https://example.test/terms
+  contact:
+    name: ng-openapi test suite
+    email: test@example.com
+    url: https://example.test/ng-openapi
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - { url: "https://api.tasks.test/v1",     description: Production }
+  - { url: "https://staging.tasks.test/v1", description: Staging }
+  - { url: "http://localhost:8080/v1",      description: Local dev }
+
+tags:
+  - { name: auth,              description: "Authentication and session lifecycle" }
+  - { name: account,           description: "Self-service account management (/me/**)" }
+  - { name: users,             description: "User directory (admin / read-only listings)" }
+  - { name: sessions,          description: "Active login sessions" }
+  - { name: apiKeys,           description: "Personal API keys" }
+  - { name: organizations,     description: "Organizations / tenants" }
+  - { name: teams,             description: "Teams within an organization" }
+  - { name: members,           description: "Membership and invitations" }
+  - { name: projects,          description: "Projects and project membership" }
+  - { name: tasks,             description: "Tasks within projects" }
+  - { name: dependencies,      description: "Task dependencies" }
+  - { name: timeTracking,      description: "Time entries on tasks" }
+  - { name: labels,            description: "Label definitions" }
+  - { name: customFields,      description: "Custom field definitions and values" }
+  - { name: comments,          description: "Discussion on tasks" }
+  - { name: reactions,         description: "Reactions on comments" }
+  - { name: attachments,       description: "File uploads and downloads" }
+  - { name: notifications,     description: "User notification inbox" }
+  - { name: search,            description: "Cross-entity search" }
+  - { name: reports,           description: "Report generation and binary downloads" }
+  - { name: webhookSubs,       description: "Webhook subscriptions (management)" }
+  - { name: webhookDeliveries, description: "Webhook delivery log" }
+  - { name: audit,             description: "Audit log" }
+  - { name: system,            description: "Health, ping, server info" }
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Exchange credentials for an access token
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/LoginRequest" } } }
+      responses:
+        "200":
+          description: OK
+          headers:
+            Set-Cookie: { description: "Session cookie", schema: { type: string } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/LoginResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the current session
+      operationId: logout
+      responses:
+        "204": { description: Logged out }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Exchange a refresh token for a new access token
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RefreshTokenRequest" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/TokenResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new user account
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RegisterRequest" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /auth/change-password:
+    post:
+      tags: [auth]
+      summary: Change the authenticated user's password
+      operationId: changePassword
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PasswordChangeRequest" } } }
+      responses:
+        "204": { description: Password changed }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /auth/2fa/setup:
+    post:
+      tags: [auth]
+      summary: Begin enrolling a TOTP authenticator (returns QR code blob)
+      operationId: setup2FA
+      responses:
+        "200":
+          description: TOTP setup payload — JSON metadata or raw PNG of the QR
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/TwoFactorSetup" } }
+            image/png:        { schema: { type: string, format: binary } }
+
+  /auth/2fa/verify:
+    post:
+      tags: [auth]
+      summary: Verify a TOTP code and activate 2FA
+      operationId: verify2FA
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TwoFactorVerifyRequest" } } }
+      responses:
+        "204": { description: 2FA activated }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /me:
+    get:
+      tags: [account]
+      summary: Get the currently authenticated user
+      operationId: getCurrentUser
+      parameters:
+        - { in: cookie, name: session,         required: false, schema: { type: string } }
+        - { $ref: "#/components/parameters/AcceptLanguage" }
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag: { description: "Entity tag for optimistic concurrency", schema: { type: string } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [account]
+      summary: Update the authenticated user's profile
+      operationId: updateCurrentUser
+      parameters:
+        - { $ref: "#/components/parameters/IfMatchParam" }
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json: { schema: { $ref: "#/components/schemas/UserPatch" } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /me/avatar:
+    post:
+      tags: [account]
+      summary: Upload a new avatar image
+      operationId: uploadAvatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: "Image file (PNG/JPEG, max 5MB)" }
+                crop: { type: string, description: "Optional crop hint", maxLength: 64 }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+        "413":
+          description: Payload too large
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    delete:
+      tags: [account]
+      summary: Remove the current avatar
+      operationId: deleteAvatar
+      responses:
+        "204": { description: Avatar removed }
+
+  /me/preferences:
+    get:
+      tags: [account]
+      summary: Get the authenticated user's preferences
+      operationId: getUserPreferences
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserPreferences" } } }
+    put:
+      tags: [account]
+      summary: Replace the authenticated user's preferences
+      operationId: updateUserPreferences
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UserPreferences" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserPreferences" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /me/sessions:
+    get:
+      tags: [sessions]
+      summary: List active sessions for the current user
+      operationId: listSessions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Session" } }
+
+  /me/sessions/{sessionId}:
+    delete:
+      tags: [sessions]
+      summary: Revoke a specific session
+      operationId: revokeSession
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Revoked }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/api-keys:
+    get:
+      tags: [apiKeys]
+      summary: List the user's API keys (secrets redacted)
+      operationId: listApiKeys
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ApiKey" } }
+    post:
+      tags: [apiKeys]
+      summary: Create a new API key (full secret returned only here)
+      operationId: createApiKey
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ApiKeyCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiKeyCreated" } } }
+
+  /me/api-keys/{keyId}:
+    delete:
+      tags: [apiKeys]
+      summary: Revoke an API key
+      operationId: revokeApiKey
+      parameters:
+        - { name: keyId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Revoked }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/notifications:
+    get:
+      tags: [notifications]
+      summary: List notifications for the current user
+      operationId: listNotifications
+      parameters:
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+        - { in: query, name: unreadOnly, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationPage" } } }
+
+  /me/notifications/{notificationId}/read:
+    post:
+      tags: [notifications]
+      summary: Mark a notification as read
+      operationId: markNotificationRead
+      parameters:
+        - { name: notificationId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Marked }
+
+  /me/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark all notifications as read
+      operationId: markAllNotificationsRead
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [readCount]
+                properties:
+                  readCount: { type: integer, format: int32, minimum: 0 }
+
+  /users:
+    get:
+      tags: [users]
+      summary: List users
+      operationId: listUsers
+      parameters:
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+        - { $ref: "#/components/parameters/SortParam" }
+        - { in: query, name: role, schema: { $ref: "#/components/schemas/Role" } }
+        - { in: query, name: q,    schema: { type: string, minLength: 1 } }
+      responses:
+        "200":
+          description: Paginated list of users
+          headers:
+            X-Total-Count:
+              description: "Total users matching the filter"
+              schema: { type: integer, format: int64 }
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserPage" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /users/{userId}:
+    get:
+      tags: [users]
+      summary: Get a user by id
+      operationId: getUser
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /organizations:
+    get:
+      tags: [organizations]
+      summary: List organizations visible to the caller
+      operationId: listOrganizations
+      parameters:
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationPage" } } }
+    post:
+      tags: [organizations]
+      summary: Create a new organization
+      operationId: createOrganization
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /organizations/{orgId}:
+    parameters:
+      - { $ref: "#/components/parameters/OrgIdParam" }
+    get:
+      tags: [organizations]
+      summary: Get an organization
+      operationId: getOrganization
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [organizations]
+      summary: Partially update an organization
+      operationId: patchOrganization
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json: { schema: { $ref: "#/components/schemas/OrganizationPatch" } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [organizations]
+      summary: Delete an organization
+      operationId: deleteOrganization
+      security: [{ oauth2: [admin] }]
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /organizations/{orgId}/teams:
+    parameters:
+      - { $ref: "#/components/parameters/OrgIdParam" }
+    get:
+      tags: [teams]
+      summary: List teams in an organization
+      operationId: listTeams
+      parameters:
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Team" } }
+    post:
+      tags: [teams]
+      summary: Create a team
+      operationId: createTeam
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TeamCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Team" } } }
+
+  /teams/{teamId}/members:
+    get:
+      tags: [members]
+      summary: List members of a team
+      operationId: listTeamMembers
+      parameters:
+        - { $ref: "#/components/parameters/TeamIdParam" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Membership" } }
+
+  /teams/{teamId}/invitations:
+    post:
+      tags: [members]
+      summary: Invite a user to a team
+      operationId: inviteMember
+      parameters:
+        - { $ref: "#/components/parameters/TeamIdParam" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/InvitationCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Invitation" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /invitations/{invitationId}/accept:
+    post:
+      tags: [members]
+      summary: Accept an invitation
+      operationId: acceptInvitation
+      parameters:
+        - { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Membership" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410":
+          description: Invitation expired
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /projects:
+    get:
+      tags: [projects]
+      summary: List projects
+      operationId: listProjects
+      parameters:
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+        - { $ref: "#/components/parameters/SortParam" }
+        - { in: query, name: status,     schema: { $ref: "#/components/schemas/ProjectStatus" } }
+        - { in: query, name: visibility, schema: { $ref: "#/components/schemas/Visibility" } }
+        - { in: query, name: tag, style: form, explode: true, schema: { type: array, items: { type: string } } }
+        - { in: query, name: createdAfter, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/ProjectPage" } } }
+    post:
+      tags: [projects]
+      summary: Create a project
+      operationId: createProject
+      security: [{ oauth2: ["write:projects"] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ProjectCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /projects/export:
+    get:
+      tags: [projects]
+      summary: Export projects as a binary download
+      operationId: exportProjects
+      parameters:
+        - { in: query, name: format, required: true, schema: { $ref: "#/components/schemas/ExportFormat" } }
+      responses:
+        "200":
+          description: Binary export
+          headers:
+            Content-Disposition:
+              description: 'attachment; filename="projects.csv"'
+              schema: { type: string }
+          content:
+            text/csv:                                                                       { schema: { type: string, format: binary } }
+            application/json:                                                               { schema: { type: string, format: binary } }
+            application/zip:                                                                { schema: { type: string, format: binary } }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:              { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /projects/{projectId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectIdParam" }
+    get:
+      tags: [projects]
+      summary: Get a project
+      operationId: getProject
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [projects]
+      summary: Partially update a project
+      operationId: patchProject
+      security: [{ oauth2: ["write:projects"] }]
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json: { schema: { $ref: "#/components/schemas/ProjectPatch" } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [projects]
+      summary: Delete a project
+      operationId: deleteProject
+      security: [{ oauth2: [admin] }]
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects/{projectId}/labels:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectIdParam" }
+    get:
+      tags: [labels]
+      summary: List labels defined on a project
+      operationId: listLabels
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Label" } }
+    post:
+      tags: [labels]
+      summary: Create a label
+      operationId: createLabel
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/LabelCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Label" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /labels/{labelId}:
+    delete:
+      tags: [labels]
+      summary: Delete a label
+      operationId: deleteLabel
+      parameters:
+        - { $ref: "#/components/parameters/LabelIdParam" }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects/{projectId}/custom-fields:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectIdParam" }
+    get:
+      tags: [customFields]
+      summary: List custom field definitions on a project
+      operationId: listCustomFields
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/CustomFieldDefinition" } }
+    post:
+      tags: [customFields]
+      summary: Define a new custom field on a project
+      operationId: createCustomField
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldDefinitionCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldDefinition" } } }
+
+  /tasks/{taskId}/custom-fields/{fieldId}:
+    put:
+      tags: [customFields]
+      summary: Set the value of a custom field on a task (polymorphic value)
+      operationId: setTaskCustomFieldValue
+      parameters:
+        - { $ref: "#/components/parameters/TaskIdParam" }
+        - { name: fieldId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldValue" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldValue" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /projects/{projectId}/tasks:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectIdParam" }
+    get:
+      tags: [tasks]
+      summary: List tasks in a project (cursor-paginated)
+      operationId: listProjectTasks
+      parameters:
+        - { in: query, name: cursor, schema: { type: string, nullable: true } }
+        - { in: query, name: limit,  schema: { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 } }
+        - { in: query, name: status, style: form, explode: true, schema: { type: array, items: { $ref: "#/components/schemas/TaskStatus" } } }
+        - { in: query, name: assignee, schema: { type: string, format: uuid } }
+        - { in: query, name: priority, schema: { $ref: "#/components/schemas/Priority" } }
+        - { in: query, name: dueBefore, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskCursorPage" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [tasks]
+      summary: Create a task in a project
+      operationId: createTask
+      security: [{ oauth2: ["write:tasks"] }]
+      parameters:
+        - { in: header, name: X-Idempotency-Key, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TaskCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /projects/{projectId}/tasks/bulk:
+    post:
+      tags: [tasks]
+      summary: Create many tasks in a single request
+      operationId: bulkCreateTasks
+      security: [{ oauth2: ["write:tasks"] }]
+      parameters:
+        - { $ref: "#/components/parameters/ProjectIdParam" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BulkTaskCreate" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/BulkOperationResult" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /projects/{projectId}/tasks/import:
+    post:
+      tags: [tasks]
+      summary: Import tasks from an uploaded file (CSV/JSON/XLSX)
+      operationId: importTasks
+      parameters:
+        - { $ref: "#/components/parameters/ProjectIdParam" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, format]
+              properties:
+                file:   { type: string, format: binary, description: "Tasks file" }
+                format: { type: string, enum: [csv, json, xlsx] }
+                dryRun: { type: boolean, default: false }
+      responses:
+        "202":
+          description: Accepted
+          content: { application/json: { schema: { $ref: "#/components/schemas/ImportJob" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /tasks/{taskId}:
+    parameters:
+      - { $ref: "#/components/parameters/TaskIdParam" }
+    get:
+      tags: [tasks]
+      summary: Get a task
+      operationId: getTask
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [tasks]
+      summary: Partially update a task
+      operationId: patchTask
+      security: [{ oauth2: ["write:tasks"] }]
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json: { schema: { $ref: "#/components/schemas/TaskPatch" } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [tasks]
+      summary: Delete a task
+      operationId: deleteTask
+      security: [{ oauth2: [admin] }]
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{taskId}/tree:
+    get:
+      tags: [tasks]
+      summary: Get a task and its full subtask tree (recursive)
+      operationId: getTaskTree
+      parameters:
+        - { $ref: "#/components/parameters/TaskIdParam" }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskTree" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{taskId}/assignees:
+    post:
+      tags: [tasks]
+      summary: Add an assignee to a task
+      operationId: assignTask
+      parameters:
+        - { $ref: "#/components/parameters/TaskIdParam" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { $ref: "#/components/schemas/Id" }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+
+  /tasks/{taskId}/assignees/{userId}:
+    delete:
+      tags: [tasks]
+      summary: Remove an assignee from a task
+      operationId: unassignTask
+      parameters:
+        - { $ref: "#/components/parameters/TaskIdParam" }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Removed }
+
+  /tasks/{taskId}/dependencies:
+    parameters:
+      - { $ref: "#/components/parameters/TaskIdParam" }
+    get:
+      tags: [dependencies]
+      summary: List dependencies declared on a task
+      operationId: listTaskDependencies
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/TaskDependency" } }
+    post:
+      tags: [dependencies]
+      summary: Declare a dependency between two tasks
+      operationId: addTaskDependency
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TaskDependencyCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskDependency" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /tasks/{taskId}/time-entries:
+    parameters:
+      - { $ref: "#/components/parameters/TaskIdParam" }
+    get:
+      tags: [timeTracking]
+      summary: List time entries logged against a task
+      operationId: listTimeEntries
+      parameters:
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/TimeEntryPage" } } }
+    post:
+      tags: [timeTracking]
+      summary: Log a time entry against a task
+      operationId: createTimeEntry
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TimeEntryCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/TimeEntry" } } }
+
+  /tasks/{taskId}/comments:
+    parameters:
+      - { $ref: "#/components/parameters/TaskIdParam" }
+    get:
+      tags: [comments]
+      summary: List comments on a task
+      operationId: listTaskComments
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Comment" } }
+    post:
+      tags: [comments]
+      summary: Add a comment to a task (polymorphic author)
+      operationId: createTaskComment
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CommentInput" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Comment" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /comments/{commentId}:
+    parameters:
+      - { $ref: "#/components/parameters/CommentIdParam" }
+    patch:
+      tags: [comments]
+      summary: Edit an existing comment
+      operationId: patchComment
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json: { schema: { $ref: "#/components/schemas/CommentPatch" } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Comment" } } }
+    delete:
+      tags: [comments]
+      summary: Delete a comment
+      operationId: deleteComment
+      responses:
+        "204": { description: Deleted }
+
+  /comments/{commentId}/reactions:
+    post:
+      tags: [reactions]
+      summary: React to a comment
+      operationId: addReaction
+      parameters:
+        - { $ref: "#/components/parameters/CommentIdParam" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ReactionCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Reaction" } } }
+
+  /comments/{commentId}/reactions/{reactionType}:
+    delete:
+      tags: [reactions]
+      summary: Remove a reaction from a comment
+      operationId: removeReaction
+      parameters:
+        - { $ref: "#/components/parameters/CommentIdParam" }
+        - { name: reactionType, in: path, required: true, schema: { $ref: "#/components/schemas/ReactionType" } }
+      responses:
+        "204": { description: Removed }
+
+  /tasks/{taskId}/attachments:
+    parameters:
+      - { $ref: "#/components/parameters/TaskIdParam" }
+    get:
+      tags: [attachments]
+      summary: List attachments on a task
+      operationId: listAttachments
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/AttachmentPage" } } }
+    post:
+      tags: [attachments]
+      summary: Upload an attachment to a task
+      operationId: uploadAttachment
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:        { type: string, format: binary, description: "Binary file" }
+                description: { type: string, maxLength: 500 }
+                tags:        { type: array, items: { type: string } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Attachment" } } }
+        "413":
+          description: Payload too large
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /tasks/{taskId}/attachments/{attachmentId}:
+    parameters:
+      - { $ref: "#/components/parameters/TaskIdParam" }
+      - { name: attachmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [attachments]
+      summary: Download an attachment's binary content
+      operationId: downloadAttachment
+      responses:
+        "200":
+          description: Binary attachment
+          headers:
+            Content-Disposition: { description: "attachment; filename=...", schema: { type: string } }
+            ETag:                { schema: { type: string } }
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+            image/png:                { schema: { type: string, format: binary } }
+            image/jpeg:               { schema: { type: string, format: binary } }
+            application/pdf:          { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [attachments]
+      summary: Delete an attachment
+      operationId: deleteAttachment
+      responses:
+        "204": { description: Deleted }
+
+  /attachments/presigned-upload:
+    post:
+      tags: [attachments]
+      summary: Get a presigned URL for direct upload to object storage
+      operationId: createPresignedUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, contentType]
+              properties:
+                filename:    { type: string, maxLength: 255 }
+                contentType: { type: string }
+                sizeBytes:   { type: integer, format: int64, minimum: 0 }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/PresignedUploadUrl" } } }
+
+  /search:
+    post:
+      tags: [search]
+      summary: Cross-entity search (returns polymorphic hits)
+      operationId: search
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SearchRequest" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/SearchResponse" } } }
+
+  /reports:
+    post:
+      tags: [reports]
+      summary: Request asynchronous report generation
+      operationId: requestReport
+      security: [{ oauth2: ["read:reports"] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ReportRequest" } } }
+      responses:
+        "202":
+          description: Accepted — generation started
+          headers:
+            Location: { description: "URL of the report job", schema: { type: string, format: uri } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ReportJob" } } }
+
+  /reports/{reportId}:
+    get:
+      tags: [reports]
+      summary: Get the metadata of a report job
+      operationId: getReport
+      parameters:
+        - { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/ReportJob" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reports/{reportId}/download:
+    get:
+      tags: [reports]
+      summary: Download the rendered report (binary blob in many formats)
+      operationId: downloadReport
+      parameters:
+        - { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binary report
+          headers:
+            Content-Disposition: { schema: { type: string } }
+          content:
+            application/pdf:                                                                 { schema: { type: string, format: binary } }
+            text/csv:                                                                         { schema: { type: string, format: binary } }
+            application/json:                                                                 { schema: { type: string, format: binary } }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:                { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Report not ready yet
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /webhook-subscriptions:
+    get:
+      tags: [webhookSubs]
+      summary: List webhook subscriptions
+      operationId: listWebhookSubscriptions
+      security: [{ oauth2: ["write:webhooks"] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/WebhookSubscription" } }
+    post:
+      tags: [webhookSubs]
+      summary: Create a webhook subscription
+      operationId: createWebhookSubscription
+      security: [{ oauth2: ["write:webhooks"] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/WebhookSubscriptionCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/WebhookSubscription" } } }
+
+  /webhook-subscriptions/{subId}:
+    delete:
+      tags: [webhookSubs]
+      summary: Delete a webhook subscription
+      operationId: deleteWebhookSubscription
+      security: [{ oauth2: ["write:webhooks"] }]
+      parameters:
+        - { name: subId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deleted }
+
+  /webhook-subscriptions/{subId}/deliveries:
+    get:
+      tags: [webhookDeliveries]
+      summary: List delivery attempts for a webhook subscription
+      operationId: listWebhookDeliveries
+      parameters:
+        - { name: subId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+        - { in: query, name: status, schema: { $ref: "#/components/schemas/WebhookDeliveryStatus" } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/WebhookDelivery" } }
+
+  /audit-log:
+    get:
+      tags: [audit]
+      summary: List audit log entries
+      operationId: listAuditLog
+      security: [{ oauth2: [admin] }]
+      parameters:
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/PageSizeParam" }
+        - { in: query, name: action,  schema: { $ref: "#/components/schemas/AuditAction" } }
+        - { in: query, name: actorId, schema: { type: string, format: uuid } }
+        - { in: query, name: from,    schema: { type: string, format: date-time } }
+        - { in: query, name: to,      schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/AuditLogPage" } } }
+
+  /ping:
+    get:
+      tags: [system]
+      summary: Liveness check (plain text)
+      operationId: ping
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema: { type: string, example: "pong" }
+
+  /health:
+    get:
+      tags: [system]
+      summary: Aggregated component health
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/HealthCheck" } } }
+        "503":
+          description: Degraded
+          content: { application/json: { schema: { $ref: "#/components/schemas/HealthCheck" } } }
+
+  /server-info:
+    get:
+      tags: [system]
+      summary: Build / version info for the running server
+      operationId: serverInfo
+      security: []
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/ServerInfo" } } }
+
+# -----------------------------------------------------------------------------
+# Components
+# -----------------------------------------------------------------------------
+components:
+
+  securitySchemes:
+    apiKey:     { type: apiKey, in: header, name: X-API-Key }
+    bearerAuth: { type: http,   scheme: bearer, bearerFormat: JWT }
+    basicAuth:  { type: http,   scheme: basic }
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.tasks.test/oauth/authorize
+          tokenUrl:         https://auth.tasks.test/oauth/token
+          refreshUrl:       https://auth.tasks.test/oauth/refresh
+          scopes:
+            "read:projects":  Read projects
+            "write:projects": Modify projects
+            "read:tasks":     Read tasks
+            "write:tasks":    Modify tasks
+            "read:reports":   Read reports
+            "write:webhooks": Manage webhook subscriptions
+            admin:            Administrative access
+        clientCredentials:
+          tokenUrl: https://auth.tasks.test/oauth/token
+          scopes: { service: "Service-to-service" }
+
+  parameters:
+    PageParam:      { name: page,     in: query, schema: { type: integer, format: int32, default: 1,  minimum: 1 } }
+    PageSizeParam:  { name: pageSize, in: query, schema: { type: integer, format: int32, default: 20, minimum: 1, maximum: 100 } }
+    SortParam:      { name: sort,     in: query, description: "Sort expression e.g. '-createdAt,name'", schema: { type: string } }
+    AcceptLanguage: { name: Accept-Language, in: header, required: false, schema: { type: string } }
+    IfMatchParam:   { name: If-Match, in: header, required: false, description: "ETag for optimistic concurrency", schema: { type: string } }
+    OrgIdParam:     { name: orgId,     in: path, required: true, schema: { type: string, format: uuid } }
+    TeamIdParam:    { name: teamId,    in: path, required: true, schema: { type: string, format: uuid } }
+    ProjectIdParam: { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+    TaskIdParam:    { name: taskId,    in: path, required: true, schema: { type: string, format: uuid } }
+    CommentIdParam: { name: commentId, in: path, required: true, schema: { type: string, format: uuid } }
+    LabelIdParam:   { name: labelId,   in: path, required: true, schema: { type: string, format: uuid } }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content: { application/json: { schema: { $ref: "#/components/schemas/ValidationError" } } }
+    Unauthorized:
+      description: Unauthorized
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Forbidden
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Resource not found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: Conflict
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:           { description: "Seconds until the client may retry", schema: { type: integer, format: int32 } }
+        X-RateLimit-Remaining: { schema: { type: integer, format: int32 } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    InternalError:
+      description: Internal server error
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  schemas:
+
+    # ===== Primitives =====
+    Id:   { type: string, format: uuid }
+    Slug: { type: string, pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$", maxLength: 64 }
+
+    # ===== Enums =====
+    Role:                  { type: string, enum: [guest, member, admin], description: "Top-level platform role." }
+    MembershipRole:        { type: string, enum: [owner, admin, maintainer, contributor, viewer], description: "Per-team/per-project role." }
+    ProjectStatus:         { type: string, enum: [planning, active, on_hold, archived] }
+    Visibility:            { type: string, enum: [private, internal, public] }
+    TaskStatus:            { type: string, enum: [todo, in_progress, blocked, in_review, done, cancelled] }
+    Priority:              { type: string, enum: [low, normal, high, urgent], default: normal }
+    Severity:              { type: string, enum: [info, low, medium, high, critical] }
+    NotificationChannel:   { type: string, enum: [email, push, sms, webhook, in_app] }
+    NotificationType:
+      type: string
+      enum: [task.assigned, task.status_changed, task.commented, comment.mentioned, project.invited, report.ready]
+    Locale:                { type: string, enum: [en-US, en-GB, fr-FR, de-DE, es-ES, ja-JP, pt-BR, zh-CN] }
+    Currency:              { type: string, enum: [USD, EUR, GBP, JPY, CAD, AUD, BRL] }
+    DayOfWeek:             { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
+    TimeUnit:              { type: string, enum: [minutes, hours, days, weeks] }
+    DependencyType:        { type: string, enum: [blocks, is_blocked_by, relates_to, duplicates, duplicated_by] }
+    ReactionType:          { type: string, enum: ["+1", "-1", laugh, hooray, confused, heart, rocket, eyes] }
+    WebhookEvent:
+      type: string
+      enum: [task.created, task.updated, task.status_changed, task.deleted, comment.created, attachment.uploaded, project.archived]
+    WebhookDeliveryStatus: { type: string, enum: [pending, success, failed, retrying] }
+    ReportFormat:          { type: string, enum: [pdf, csv, json, xlsx] }
+    ExportFormat:          { type: string, enum: [csv, json, zip, xlsx] }
+    ReportStatus:          { type: string, enum: [queued, running, succeeded, failed, cancelled] }
+    ImportJobStatus:       { type: string, enum: [pending, running, succeeded, partial, failed] }
+    AuditAction:
+      type: string
+      enum: [user.login, user.logout, project.created, project.deleted, task.created, task.deleted, api_key.created, api_key.revoked, webhook.created]
+    ApiKeyScope:           { type: string, enum: [read, write, admin] }
+    SearchEntityType:      { type: string, enum: [project, task, user, comment] }
+    InvitationStatus:      { type: string, enum: [pending, accepted, declined, expired, revoked] }
+    HealthStatus:          { type: string, enum: [up, degraded, down] }
+    CustomFieldType:       { type: string, enum: [string, number, date, boolean, enum, multi_enum] }
+
+    # ===== Generic value objects =====
+    GeoPoint:
+      type: array
+      description: "Tuple of [longitude, latitude]. (Degraded from prefixItems for OpenAPI 3.0.)"
+      items: { type: number }
+      minItems: 2
+      maxItems: 2
+
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:   { type: number, format: double, description: "Decimal amount (use string in strict-decimal clients)" }
+        currency: { $ref: "#/components/schemas/Currency" }
+
+    Address:
+      type: object
+      required: [country]
+      properties:
+        line1:      { type: string, maxLength: 200 }
+        line2:      { type: string, maxLength: 200, nullable: true }
+        city:       { type: string, maxLength: 100 }
+        region:     { type: string, maxLength: 100, nullable: true }
+        postalCode: { type: string, maxLength: 20,  nullable: true }
+        country:    { type: string, minLength: 2, maxLength: 2, description: "ISO 3166-1 alpha-2 country code" }
+
+    RateLimitInfo:
+      type: object
+      required: [limit, remaining, resetAt]
+      properties:
+        limit:     { type: integer, format: int32, minimum: 0 }
+        remaining: { type: integer, format: int32, minimum: 0 }
+        resetAt:   { type: string, format: date-time }
+
+    # ===== Errors =====
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:    { type: string, description: "Stable machine-readable error code" }
+        message: { type: string }
+        traceId: { type: string, nullable: true }
+        details:
+          type: object
+          description: "Free-form error context — map of arbitrary primitive values."
+          additionalProperties: { type: string }
+
+    ValidationError:
+      allOf:
+        - { $ref: "#/components/schemas/Error" }
+        - type: object
+          required: [fields]
+          properties:
+            fields:
+              type: array
+              items:
+                type: object
+                required: [path, issue]
+                properties:
+                  path:  { type: string, description: "JSON pointer to the offending field" }
+                  issue: { type: string }
+                  value: { description: "Submitted value (best-effort)", nullable: true }
+
+    # ===== Users / account =====
+    User:
+      type: object
+      required: [id, email, name, role, status, createdAt]
+      properties:
+        id:        { $ref: "#/components/schemas/Id" }
+        email:     { type: string, format: email }
+        name:      { type: string, minLength: 1, maxLength: 200 }
+        role:      { $ref: "#/components/schemas/Role" }
+        status:    { type: string, enum: [active, suspended, invited], default: active }
+        avatarUrl: { type: string, format: uri, nullable: true }
+        bio:       { type: string, maxLength: 500, nullable: true }
+        locale:    { allOf: [{ $ref: "#/components/schemas/Locale" }], nullable: true }
+        timezone:  { type: string, nullable: true, example: "America/New_York" }
+        phone:     { type: string, nullable: true, example: "+1-555-0123" }
+        address:   { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+        twoFactorEnabled: { type: boolean, default: false }
+        labels:    { type: object, additionalProperties: { type: string }, description: "Free-form key/value labels on the user (map type)." }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true, nullable: true }
+        lastLoginAt: { type: string, format: date-time, readOnly: true, nullable: true }
+
+    UserPatch:
+      type: object
+      properties:
+        name:     { type: string }
+        bio:      { type: string, nullable: true }
+        locale:   { $ref: "#/components/schemas/Locale" }
+        timezone: { type: string, nullable: true }
+        phone:    { type: string, nullable: true }
+        address:  { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+
+    UserPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: { $ref: "#/components/schemas/User" } }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    UserPreferences:
+      type: object
+      required: [locale, timezone, theme]
+      properties:
+        locale:    { $ref: "#/components/schemas/Locale" }
+        timezone:  { type: string, example: "Europe/Berlin" }
+        theme:     { type: string, enum: [light, dark, system], default: system }
+        weekStart: { $ref: "#/components/schemas/DayOfWeek" }
+        notifications:
+          type: object
+          description: "Map of NotificationType -> array of channels enabled for that type."
+          additionalProperties:
+            type: array
+            items: { $ref: "#/components/schemas/NotificationChannel" }
+        digestFrequency: { type: string, enum: [never, daily, weekly], default: weekly }
+
+    Session:
+      type: object
+      required: [id, createdAt, ipAddress, userAgent, current]
+      properties:
+        id:          { $ref: "#/components/schemas/Id" }
+        createdAt:   { type: string, format: date-time }
+        expiresAt:   { type: string, format: date-time, nullable: true }
+        ipAddress:   { type: string, format: ipv4 }
+        ipAddressV6: { type: string, format: ipv6, nullable: true }
+        userAgent:   { type: string, maxLength: 500 }
+        location:    { allOf: [{ $ref: "#/components/schemas/GeoPoint" }], nullable: true }
+        current:     { type: boolean }
+
+    # ===== Auth payloads =====
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password, writeOnly: true, minLength: 8 }
+        totp:     { type: string, pattern: "^[0-9]{6}$", nullable: true }
+
+    LoginResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string, nullable: true }
+        tokenType:    { type: string, enum: [Bearer] }
+        expiresIn:    { type: integer, format: int32, description: "Lifetime in seconds" }
+        user:         { $ref: "#/components/schemas/User" }
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string, nullable: true }
+        tokenType:    { type: string, enum: [Bearer] }
+        expiresIn:    { type: integer, format: int32 }
+
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:       { type: string, format: email }
+        password:    { type: string, format: password, writeOnly: true, minLength: 8, maxLength: 128 }
+        name:        { type: string, minLength: 1, maxLength: 200 }
+        locale:      { $ref: "#/components/schemas/Locale" }
+        inviteToken: { type: string, nullable: true }
+
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password, writeOnly: true }
+        newPassword:     { type: string, format: password, writeOnly: true, minLength: 8 }
+
+    TwoFactorSetup:
+      type: object
+      required: [secret, otpAuthUrl, qrPng]
+      properties:
+        secret:        { type: string, description: "Base32 TOTP secret" }
+        otpAuthUrl:    { type: string, format: uri }
+        qrPng:         { type: string, format: byte, description: "Base64-encoded PNG of the QR code" }
+        recoveryCodes:
+          type: array
+          items: { type: string }
+          minItems: 8
+          maxItems: 16
+
+    TwoFactorVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: "^[0-9]{6}$" }
+
+    # ===== API keys =====
+    ApiKey:
+      type: object
+      required: [id, name, prefix, scopes, createdAt]
+      properties:
+        id:         { $ref: "#/components/schemas/Id" }
+        name:       { type: string, minLength: 1, maxLength: 100 }
+        prefix:     { type: string, description: "First 8 characters of the secret (full secret never returned again)" }
+        scopes:     { type: array, items: { $ref: "#/components/schemas/ApiKeyScope" }, uniqueItems: true }
+        expiresAt:  { type: string, format: date-time, nullable: true }
+        lastUsedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        createdAt:  { type: string, format: date-time, readOnly: true }
+
+    ApiKeyCreate:
+      type: object
+      required: [name, scopes]
+      properties:
+        name:      { type: string, minLength: 1, maxLength: 100 }
+        scopes:    { type: array, items: { $ref: "#/components/schemas/ApiKeyScope" }, minItems: 1 }
+        expiresAt: { type: string, format: date-time, nullable: true }
+
+    ApiKeyCreated:
+      allOf:
+        - { $ref: "#/components/schemas/ApiKey" }
+        - type: object
+          required: [secret]
+          properties:
+            secret: { type: string, writeOnly: true, description: "Full secret — shown only on creation" }
+
+    # ===== Organizations =====
+    Organization:
+      type: object
+      required: [id, name, slug, createdAt]
+      properties:
+        id:           { $ref: "#/components/schemas/Id" }
+        name:         { type: string, minLength: 1, maxLength: 200 }
+        slug:         { $ref: "#/components/schemas/Slug" }
+        description:  { type: string, maxLength: 5000, nullable: true }
+        billingEmail: { type: string, format: email, nullable: true }
+        address:      { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+        plan:         { type: string, enum: [free, team, business, enterprise], default: free }
+        seatsUsed:    { type: integer, format: int32, minimum: 0 }
+        seatsTotal:   { type: integer, format: int32, minimum: 0 }
+        createdAt:    { type: string, format: date-time, readOnly: true }
+
+    OrganizationCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name:         { type: string }
+        slug:         { $ref: "#/components/schemas/Slug" }
+        description:  { type: string, nullable: true }
+        billingEmail: { type: string, format: email, nullable: true }
+
+    OrganizationPatch:
+      type: object
+      properties:
+        name:         { type: string }
+        description:  { type: string, nullable: true }
+        billingEmail: { type: string, format: email, nullable: true }
+        address:      { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+
+    OrganizationPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: { $ref: "#/components/schemas/Organization" } }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    # ===== Teams =====
+    Team:
+      type: object
+      required: [id, orgId, name, createdAt]
+      properties:
+        id:          { $ref: "#/components/schemas/Id" }
+        orgId:       { $ref: "#/components/schemas/Id" }
+        name:        { type: string, minLength: 1, maxLength: 200 }
+        slug:        { $ref: "#/components/schemas/Slug" }
+        description: { type: string, nullable: true }
+        memberCount: { type: integer, format: int32, minimum: 0, readOnly: true }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+
+    TeamCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name:        { type: string }
+        slug:        { $ref: "#/components/schemas/Slug" }
+        description: { type: string, nullable: true }
+
+    Membership:
+      type: object
+      required: [userId, teamId, role, joinedAt]
+      properties:
+        userId:   { $ref: "#/components/schemas/Id" }
+        teamId:   { $ref: "#/components/schemas/Id" }
+        role:     { $ref: "#/components/schemas/MembershipRole" }
+        joinedAt: { type: string, format: date-time, readOnly: true }
+        user:     { allOf: [{ $ref: "#/components/schemas/User" }], nullable: true, description: "Optionally inlined when expanded" }
+
+    Invitation:
+      type: object
+      required: [id, email, teamId, role, status, createdAt]
+      properties:
+        id:        { $ref: "#/components/schemas/Id" }
+        email:     { type: string, format: email }
+        teamId:    { $ref: "#/components/schemas/Id" }
+        role:      { $ref: "#/components/schemas/MembershipRole" }
+        status:    { $ref: "#/components/schemas/InvitationStatus" }
+        token:     { type: string, writeOnly: true, description: "Acceptance token (never returned after creation)" }
+        invitedBy: { $ref: "#/components/schemas/Id" }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    InvitationCreate:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        role:  { $ref: "#/components/schemas/MembershipRole" }
+
+    # ===== Projects =====
+    Project:
+      type: object
+      required: [id, orgId, name, slug, status, visibility, ownerId, createdAt, updatedAt]
+      properties:
+        id:          { $ref: "#/components/schemas/Id" }
+        orgId:       { $ref: "#/components/schemas/Id" }
+        name:        { type: string, minLength: 1, maxLength: 200 }
+        slug:        { $ref: "#/components/schemas/Slug" }
+        description: { type: string, maxLength: 5000, nullable: true }
+        status:      { $ref: "#/components/schemas/ProjectStatus" }
+        visibility:  { $ref: "#/components/schemas/Visibility" }
+        ownerId:     { $ref: "#/components/schemas/Id" }
+        memberIds:   { type: array, items: { $ref: "#/components/schemas/Id" }, uniqueItems: true }
+        tags:        { type: array, items: { type: string, maxLength: 40 }, uniqueItems: true }
+        color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", nullable: true, example: "#3366ff" }
+        budget:      { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        startDate:   { type: string, format: date, nullable: true }
+        endDate:     { type: string, format: date, nullable: true }
+        progress:    { type: number, format: float, minimum: 0, maximum: 1, readOnly: true }
+        taskCount:   { type: integer, format: int32, minimum: 0, readOnly: true }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+        updatedAt:   { type: string, format: date-time, readOnly: true }
+        archivedAt:  { type: string, format: date-time, nullable: true, readOnly: true }
+
+    ProjectCreate:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string, minLength: 1, maxLength: 200 }
+        slug:        { $ref: "#/components/schemas/Slug" }
+        description: { type: string, nullable: true }
+        visibility:  { $ref: "#/components/schemas/Visibility" }
+        memberIds:   { type: array, items: { $ref: "#/components/schemas/Id" } }
+        tags:        { type: array, items: { type: string } }
+        color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", nullable: true }
+        budget:      { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        startDate:   { type: string, format: date, nullable: true }
+        endDate:     { type: string, format: date, nullable: true }
+
+    ProjectPatch:
+      type: object
+      properties:
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        status:      { $ref: "#/components/schemas/ProjectStatus" }
+        visibility:  { $ref: "#/components/schemas/Visibility" }
+        tags:        { type: array, items: { type: string } }
+        color:       { type: string, nullable: true }
+        budget:      { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+
+    ProjectPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: { $ref: "#/components/schemas/Project" } }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    # ===== Tasks =====
+    Task:
+      type: object
+      required: [id, projectId, title, status, priority, createdAt, updatedAt]
+      properties:
+        id:              { $ref: "#/components/schemas/Id" }
+        projectId:       { $ref: "#/components/schemas/Id" }
+        parentTaskId:    { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+        title:           { type: string, minLength: 1, maxLength: 200 }
+        description:     { type: string, nullable: true }
+        status:          { $ref: "#/components/schemas/TaskStatus" }
+        priority:        { $ref: "#/components/schemas/Priority" }
+        severity:        { allOf: [{ $ref: "#/components/schemas/Severity" }], nullable: true }
+        assigneeIds:     { type: array, items: { $ref: "#/components/schemas/Id" }, uniqueItems: true }
+        reporterId:      { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+        labelIds:        { type: array, items: { $ref: "#/components/schemas/Id" }, uniqueItems: true }
+        dueDate:         { type: string, format: date, nullable: true }
+        startDate:       { type: string, format: date, nullable: true }
+        estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
+        actualMinutes:   { type: integer, format: int32, minimum: 0, readOnly: true }
+        progress:        { type: number, format: float, minimum: 0, maximum: 1, nullable: true }
+        location:        { allOf: [{ $ref: "#/components/schemas/GeoPoint" }], nullable: true }
+        customFields:
+          type: object
+          description: "Map of CustomFieldDefinition.id -> polymorphic CustomFieldValue."
+          additionalProperties: { $ref: "#/components/schemas/CustomFieldValue" }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+        closedAt:  { type: string, format: date-time, nullable: true, readOnly: true }
+
+    TaskCreate:
+      type: object
+      required: [title]
+      properties:
+        title:           { type: string, minLength: 1, maxLength: 200 }
+        description:     { type: string, nullable: true }
+        priority:        { $ref: "#/components/schemas/Priority" }
+        severity:        { $ref: "#/components/schemas/Severity" }
+        assigneeIds:     { type: array, items: { $ref: "#/components/schemas/Id" } }
+        labelIds:        { type: array, items: { $ref: "#/components/schemas/Id" } }
+        dueDate:         { type: string, format: date, nullable: true }
+        startDate:       { type: string, format: date, nullable: true }
+        estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
+        location:        { $ref: "#/components/schemas/GeoPoint" }
+        parentTaskId:    { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+
+    TaskPatch:
+      type: object
+      properties:
+        title:           { type: string }
+        description:     { type: string, nullable: true }
+        status:          { $ref: "#/components/schemas/TaskStatus" }
+        priority:        { $ref: "#/components/schemas/Priority" }
+        severity:        { allOf: [{ $ref: "#/components/schemas/Severity" }], nullable: true }
+        assigneeIds:     { type: array, items: { $ref: "#/components/schemas/Id" } }
+        labelIds:        { type: array, items: { $ref: "#/components/schemas/Id" } }
+        dueDate:         { type: string, format: date, nullable: true }
+        estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
+        progress:        { type: number, format: float, minimum: 0, maximum: 1, nullable: true }
+
+    TaskCursorPage:
+      type: object
+      required: [items]
+      properties:
+        items:      { type: array, items: { $ref: "#/components/schemas/Task" } }
+        nextCursor: { type: string, nullable: true }
+        prevCursor: { type: string, nullable: true }
+
+    TaskTree:
+      type: object
+      description: "Recursive node — a task with its child tasks inlined."
+      required: [task]
+      properties:
+        task:     { $ref: "#/components/schemas/Task" }
+        children: { type: array, items: { $ref: "#/components/schemas/TaskTree" } }
+
+    BulkTaskCreate:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: "#/components/schemas/TaskCreate" }
+        stopOnError: { type: boolean, default: false }
+
+    BulkOperationResult:
+      type: object
+      required: [requested, succeeded, failed]
+      properties:
+        requested: { type: integer, format: int32, minimum: 0 }
+        succeeded: { type: integer, format: int32, minimum: 0 }
+        failed:    { type: integer, format: int32, minimum: 0 }
+        created:   { type: array, items: { $ref: "#/components/schemas/Task" } }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [index, error]
+            properties:
+              index: { type: integer, format: int32, minimum: 0 }
+              error: { $ref: "#/components/schemas/Error" }
+
+    # ===== Dependencies =====
+    TaskDependency:
+      type: object
+      required: [id, sourceTaskId, targetTaskId, type, createdAt]
+      properties:
+        id:           { $ref: "#/components/schemas/Id" }
+        sourceTaskId: { $ref: "#/components/schemas/Id" }
+        targetTaskId: { $ref: "#/components/schemas/Id" }
+        type:         { $ref: "#/components/schemas/DependencyType" }
+        note:         { type: string, maxLength: 500, nullable: true }
+        createdAt:    { type: string, format: date-time, readOnly: true }
+
+    TaskDependencyCreate:
+      type: object
+      required: [targetTaskId, type]
+      properties:
+        targetTaskId: { $ref: "#/components/schemas/Id" }
+        type:         { $ref: "#/components/schemas/DependencyType" }
+        note:         { type: string, nullable: true }
+
+    # ===== Time entries =====
+    TimeEntry:
+      type: object
+      required: [id, taskId, userId, durationMinutes, loggedAt]
+      properties:
+        id:              { $ref: "#/components/schemas/Id" }
+        taskId:          { $ref: "#/components/schemas/Id" }
+        userId:          { $ref: "#/components/schemas/Id" }
+        durationMinutes: { type: integer, format: int32, minimum: 1 }
+        unit:            { $ref: "#/components/schemas/TimeUnit" }
+        note:            { type: string, maxLength: 1000, nullable: true }
+        billable:        { type: boolean, default: false }
+        loggedAt:        { type: string, format: date-time }
+
+    TimeEntryCreate:
+      type: object
+      required: [durationMinutes, loggedAt]
+      properties:
+        durationMinutes: { type: integer, format: int32, minimum: 1 }
+        unit:            { $ref: "#/components/schemas/TimeUnit" }
+        note:            { type: string, nullable: true }
+        billable:        { type: boolean, default: false }
+        loggedAt:        { type: string, format: date-time }
+
+    TimeEntryPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:        { type: array, items: { $ref: "#/components/schemas/TimeEntry" } }
+        page:         { type: integer, format: int32 }
+        pageSize:     { type: integer, format: int32 }
+        total:        { type: integer, format: int64 }
+        totalMinutes: { type: integer, format: int64, minimum: 0 }
+
+    # ===== Labels =====
+    Label:
+      type: object
+      required: [id, projectId, name, color]
+      properties:
+        id:          { $ref: "#/components/schemas/Id" }
+        projectId:   { $ref: "#/components/schemas/Id" }
+        name:        { type: string, minLength: 1, maxLength: 40 }
+        color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", example: "#ff6600" }
+        description: { type: string, maxLength: 200, nullable: true }
+
+    LabelCreate:
+      type: object
+      required: [name, color]
+      properties:
+        name:        { type: string, minLength: 1, maxLength: 40 }
+        color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+        description: { type: string, nullable: true }
+
+    # ===== Custom fields =====
+    CustomFieldDefinition:
+      type: object
+      required: [id, projectId, name, type]
+      properties:
+        id:           { $ref: "#/components/schemas/Id" }
+        projectId:    { $ref: "#/components/schemas/Id" }
+        name:         { type: string, minLength: 1, maxLength: 100 }
+        type:         { $ref: "#/components/schemas/CustomFieldType" }
+        required:     { type: boolean, default: false }
+        options:      { type: array, items: { type: string }, description: "Permitted values for enum / multi_enum fields" }
+        defaultValue: { allOf: [{ $ref: "#/components/schemas/CustomFieldValue" }], nullable: true }
+
+    CustomFieldDefinitionCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name:     { type: string }
+        type:     { $ref: "#/components/schemas/CustomFieldType" }
+        required: { type: boolean, default: false }
+        options:  { type: array, items: { type: string } }
+
+    CustomFieldValue:
+      description: "Polymorphic custom-field value tagged by `kind`."
+      oneOf:
+        - { $ref: "#/components/schemas/StringFieldValue" }
+        - { $ref: "#/components/schemas/NumberFieldValue" }
+        - { $ref: "#/components/schemas/DateFieldValue" }
+        - { $ref: "#/components/schemas/BooleanFieldValue" }
+        - { $ref: "#/components/schemas/EnumFieldValue" }
+        - { $ref: "#/components/schemas/MultiEnumFieldValue" }
+      discriminator:
+        propertyName: kind
+        mapping:
+          string:     "#/components/schemas/StringFieldValue"
+          number:     "#/components/schemas/NumberFieldValue"
+          date:       "#/components/schemas/DateFieldValue"
+          boolean:    "#/components/schemas/BooleanFieldValue"
+          enum:       "#/components/schemas/EnumFieldValue"
+          multi_enum: "#/components/schemas/MultiEnumFieldValue"
+
+    StringFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { type: string, enum: [string] }
+        value: { type: string, maxLength: 2000 }
+
+    NumberFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { type: string, enum: [number] }
+        value: { type: number, format: double }
+
+    DateFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { type: string, enum: [date] }
+        value: { type: string, format: date }
+
+    BooleanFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { type: string, enum: [boolean] }
+        value: { type: boolean }
+
+    EnumFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { type: string, enum: [enum] }
+        value: { type: string }
+
+    MultiEnumFieldValue:
+      type: object
+      required: [kind, values]
+      properties:
+        kind:   { type: string, enum: [multi_enum] }
+        values: { type: array, items: { type: string }, uniqueItems: true }
+
+    # ===== Comments / reactions =====
+    CommentInput:
+      description: "Discriminated input for posting a comment as a human user, a bot integration, or the system itself."
+      oneOf:
+        - { $ref: "#/components/schemas/HumanCommentInput" }
+        - { $ref: "#/components/schemas/BotCommentInput" }
+        - { $ref: "#/components/schemas/SystemCommentInput" }
+      discriminator:
+        propertyName: authorType
+        mapping:
+          human:  "#/components/schemas/HumanCommentInput"
+          bot:    "#/components/schemas/BotCommentInput"
+          system: "#/components/schemas/SystemCommentInput"
+
+    CommentInputBase:
+      type: object
+      required: [authorType, body]
+      properties:
+        authorType: { type: string }
+        body:       { type: string, minLength: 1, maxLength: 5000 }
+        mentions:   { type: array, items: { $ref: "#/components/schemas/Id" }, uniqueItems: true }
+
+    HumanCommentInput:
+      allOf:
+        - { $ref: "#/components/schemas/CommentInputBase" }
+        - type: object
+          required: [userId]
+          properties:
+            authorType: { type: string, enum: [human] }
+            userId:     { $ref: "#/components/schemas/Id" }
+
+    BotCommentInput:
+      allOf:
+        - { $ref: "#/components/schemas/CommentInputBase" }
+        - type: object
+          required: [botId, botName]
+          properties:
+            authorType: { type: string, enum: [bot] }
+            botId:      { type: string, minLength: 1 }
+            botName:    { type: string, minLength: 1 }
+
+    SystemCommentInput:
+      allOf:
+        - { $ref: "#/components/schemas/CommentInputBase" }
+        - type: object
+          required: [eventType]
+          properties:
+            authorType: { type: string, enum: [system] }
+            eventType:  { type: string, minLength: 1 }
+
+    Comment:
+      type: object
+      required: [id, taskId, author, createdAt]
+      properties:
+        id:       { $ref: "#/components/schemas/Id" }
+        taskId:   { $ref: "#/components/schemas/Id" }
+        author:   { $ref: "#/components/schemas/CommentInput" }
+        body:     { type: string }
+        bodyHtml: { type: string, readOnly: true, nullable: true }
+        reactions:
+          type: object
+          description: "Map of reaction type -> count."
+          additionalProperties: { type: integer, format: int32, minimum: 0 }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        editedAt:  { type: string, format: date-time, nullable: true, readOnly: true }
+
+    CommentPatch:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 5000 }
+
+    Reaction:
+      type: object
+      required: [type, userId, createdAt]
+      properties:
+        type:      { $ref: "#/components/schemas/ReactionType" }
+        userId:    { $ref: "#/components/schemas/Id" }
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    ReactionCreate:
+      type: object
+      required: [type]
+      properties:
+        type: { $ref: "#/components/schemas/ReactionType" }
+
+    # ===== Attachments =====
+    Attachment:
+      type: object
+      required: [id, taskId, filename, contentType, sizeBytes, url, uploadedAt]
+      properties:
+        id:           { $ref: "#/components/schemas/Id" }
+        taskId:       { $ref: "#/components/schemas/Id" }
+        filename:     { type: string, maxLength: 255 }
+        contentType:  { type: string, example: "image/png" }
+        sizeBytes:    { type: integer, format: int64, minimum: 0 }
+        checksum:     { type: string, nullable: true, description: "Hex-encoded SHA-256" }
+        url:          { type: string, format: uri }
+        thumbnailUrl: { type: string, format: uri, nullable: true }
+        description:  { type: string, nullable: true }
+        tags:         { type: array, items: { type: string } }
+        uploadedBy:   { $ref: "#/components/schemas/Id" }
+        uploadedAt:   { type: string, format: date-time, readOnly: true }
+
+    AttachmentPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: { $ref: "#/components/schemas/Attachment" } }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    PresignedUploadUrl:
+      type: object
+      required: [url, method, expiresAt]
+      properties:
+        url:       { type: string, format: uri }
+        method:    { type: string, enum: [PUT, POST] }
+        headers:   { type: object, additionalProperties: { type: string } }
+        fields:    { type: object, additionalProperties: { type: string } }
+        expiresAt: { type: string, format: date-time }
+
+    # ===== Notifications =====
+    Notification:
+      type: object
+      required: [id, type, message, read, createdAt]
+      properties:
+        id:        { $ref: "#/components/schemas/Id" }
+        type:      { $ref: "#/components/schemas/NotificationType" }
+        message:   { type: string }
+        read:      { type: boolean, default: false }
+        link:      { type: string, format: uri, nullable: true }
+        data:
+          type: object
+          description: "Free-form context for this notification — keys depend on `type`."
+          additionalProperties: true
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    NotificationPage:
+      type: object
+      required: [items, unreadCount, page, pageSize, total]
+      properties:
+        items:       { type: array, items: { $ref: "#/components/schemas/Notification" } }
+        unreadCount: { type: integer, format: int32, minimum: 0 }
+        page:        { type: integer, format: int32 }
+        pageSize:    { type: integer, format: int32 }
+        total:       { type: integer, format: int64 }
+
+    # ===== Search =====
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:    { type: string, minLength: 1, maxLength: 500 }
+        entities: { type: array, items: { $ref: "#/components/schemas/SearchEntityType" }, uniqueItems: true }
+        limit:    { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 }
+        filters:
+          type: object
+          description: "Free-form key/value filters (server interprets per-entity)."
+          additionalProperties: { type: string }
+
+    SearchResponse:
+      type: object
+      required: [hits, total]
+      properties:
+        hits:  { type: array, items: { $ref: "#/components/schemas/SearchResultItem" } }
+        total: { type: integer, format: int64, minimum: 0 }
+
+    SearchResultItem:
+      description: "Polymorphic search hit — one of project / task / user / comment."
+      oneOf:
+        - { $ref: "#/components/schemas/ProjectSearchHit" }
+        - { $ref: "#/components/schemas/TaskSearchHit" }
+        - { $ref: "#/components/schemas/UserSearchHit" }
+        - { $ref: "#/components/schemas/CommentSearchHit" }
+      discriminator:
+        propertyName: entity
+        mapping:
+          project: "#/components/schemas/ProjectSearchHit"
+          task:    "#/components/schemas/TaskSearchHit"
+          user:    "#/components/schemas/UserSearchHit"
+          comment: "#/components/schemas/CommentSearchHit"
+
+    SearchHitBase:
+      type: object
+      required: [entity, score]
+      properties:
+        entity:    { type: string }
+        score:     { type: number, format: float, minimum: 0 }
+        highlight: { type: string, nullable: true }
+
+    ProjectSearchHit:
+      allOf:
+        - { $ref: "#/components/schemas/SearchHitBase" }
+        - type: object
+          required: [project]
+          properties:
+            entity:  { type: string, enum: [project] }
+            project: { $ref: "#/components/schemas/Project" }
+
+    TaskSearchHit:
+      allOf:
+        - { $ref: "#/components/schemas/SearchHitBase" }
+        - type: object
+          required: [task]
+          properties:
+            entity: { type: string, enum: [task] }
+            task:   { $ref: "#/components/schemas/Task" }
+
+    UserSearchHit:
+      allOf:
+        - { $ref: "#/components/schemas/SearchHitBase" }
+        - type: object
+          required: [user]
+          properties:
+            entity: { type: string, enum: [user] }
+            user:   { $ref: "#/components/schemas/User" }
+
+    CommentSearchHit:
+      allOf:
+        - { $ref: "#/components/schemas/SearchHitBase" }
+        - type: object
+          required: [comment]
+          properties:
+            entity:  { type: string, enum: [comment] }
+            comment: { $ref: "#/components/schemas/Comment" }
+
+    # ===== Reports / import =====
+    ReportRequest:
+      type: object
+      required: [kind, format]
+      properties:
+        kind:            { type: string, enum: [project_summary, task_export, time_summary, audit], description: "Which report to generate" }
+        format:          { $ref: "#/components/schemas/ReportFormat" }
+        projectIds:      { type: array, items: { $ref: "#/components/schemas/Id" } }
+        from:            { type: string, format: date, nullable: true }
+        to:              { type: string, format: date, nullable: true }
+        timezone:        { type: string, default: "UTC" }
+        includeArchived: { type: boolean, default: false }
+
+    ReportJob:
+      type: object
+      required: [id, kind, format, status, requestedAt]
+      properties:
+        id:          { $ref: "#/components/schemas/Id" }
+        kind:        { type: string }
+        format:      { $ref: "#/components/schemas/ReportFormat" }
+        status:      { $ref: "#/components/schemas/ReportStatus" }
+        progress:    { type: number, format: float, minimum: 0, maximum: 1 }
+        requestedBy: { $ref: "#/components/schemas/Id" }
+        requestedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        downloadUrl: { type: string, format: uri, nullable: true }
+        sizeBytes:   { type: integer, format: int64, minimum: 0, nullable: true }
+        error:       { allOf: [{ $ref: "#/components/schemas/Error" }], nullable: true }
+
+    ImportJob:
+      type: object
+      required: [id, status, createdAt]
+      properties:
+        id:        { $ref: "#/components/schemas/Id" }
+        status:    { $ref: "#/components/schemas/ImportJobStatus" }
+        progress:  { type: number, format: float, minimum: 0, maximum: 1 }
+        total:     { type: integer, format: int32, minimum: 0 }
+        succeeded: { type: integer, format: int32, minimum: 0 }
+        failed:    { type: integer, format: int32, minimum: 0 }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [row, error]
+            properties:
+              row:   { type: integer, format: int32, minimum: 1 }
+              error: { type: string }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+
+    # ===== Webhook subscriptions =====
+    WebhookSubscription:
+      type: object
+      required: [id, url, events, active, createdAt]
+      properties:
+        id:          { $ref: "#/components/schemas/Id" }
+        url:         { type: string, format: uri }
+        events:      { type: array, items: { $ref: "#/components/schemas/WebhookEvent" }, uniqueItems: true, minItems: 1 }
+        active:      { type: boolean, default: true }
+        secret:      { type: string, writeOnly: true, description: "HMAC signing secret (returned only on creation)" }
+        description: { type: string, maxLength: 500, nullable: true }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+
+    WebhookSubscriptionCreate:
+      type: object
+      required: [url, events]
+      properties:
+        url:         { type: string, format: uri }
+        events:      { type: array, items: { $ref: "#/components/schemas/WebhookEvent" }, uniqueItems: true, minItems: 1 }
+        description: { type: string, nullable: true }
+
+    WebhookDelivery:
+      type: object
+      required: [id, subscriptionId, event, status, attemptCount, createdAt]
+      properties:
+        id:             { $ref: "#/components/schemas/Id" }
+        subscriptionId: { $ref: "#/components/schemas/Id" }
+        event:          { $ref: "#/components/schemas/WebhookEvent" }
+        status:         { $ref: "#/components/schemas/WebhookDeliveryStatus" }
+        attemptCount:   { type: integer, format: int32, minimum: 1 }
+        responseStatus: { type: integer, format: int32, nullable: true }
+        responseBody:   { type: string, nullable: true }
+        nextRetryAt:    { type: string, format: date-time, nullable: true }
+        createdAt:      { type: string, format: date-time, readOnly: true }
+
+    # ===== Webhook event payloads (still defined here even though no `webhooks:` section in 3.0) =====
+    TaskCreatedEvent:
+      type: object
+      required: [eventId, type, occurredAt, task]
+      properties:
+        eventId:    { $ref: "#/components/schemas/Id" }
+        type:       { type: string, enum: [task.created] }
+        occurredAt: { type: string, format: date-time }
+        task:       { $ref: "#/components/schemas/Task" }
+
+    TaskStatusChangedEvent:
+      type: object
+      required: [eventId, type, occurredAt, taskId, from, to]
+      properties:
+        eventId:    { $ref: "#/components/schemas/Id" }
+        type:       { type: string, enum: [task.status_changed] }
+        occurredAt: { type: string, format: date-time }
+        taskId:     { $ref: "#/components/schemas/Id" }
+        from:       { $ref: "#/components/schemas/TaskStatus" }
+        to:         { $ref: "#/components/schemas/TaskStatus" }
+
+    CommentCreatedEvent:
+      type: object
+      required: [eventId, type, occurredAt, comment]
+      properties:
+        eventId:    { $ref: "#/components/schemas/Id" }
+        type:       { type: string, enum: [comment.created] }
+        occurredAt: { type: string, format: date-time }
+        comment:    { $ref: "#/components/schemas/Comment" }
+
+    AttachmentUploadedEvent:
+      type: object
+      required: [eventId, type, occurredAt, attachment]
+      properties:
+        eventId:    { $ref: "#/components/schemas/Id" }
+        type:       { type: string, enum: [attachment.uploaded] }
+        occurredAt: { type: string, format: date-time }
+        attachment: { $ref: "#/components/schemas/Attachment" }
+
+    ProjectArchivedEvent:
+      type: object
+      required: [eventId, type, occurredAt, projectId, archivedBy]
+      properties:
+        eventId:    { $ref: "#/components/schemas/Id" }
+        type:       { type: string, enum: [project.archived] }
+        occurredAt: { type: string, format: date-time }
+        projectId:  { $ref: "#/components/schemas/Id" }
+        archivedBy: { $ref: "#/components/schemas/Id" }
+
+    # ===== Audit log =====
+    AuditLogEntry:
+      type: object
+      required: [id, action, actorId, occurredAt]
+      properties:
+        id:         { $ref: "#/components/schemas/Id" }
+        action:     { $ref: "#/components/schemas/AuditAction" }
+        actorId:    { $ref: "#/components/schemas/Id" }
+        targetType: { type: string, nullable: true, example: "task" }
+        targetId:   { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+        ipAddress:  { type: string, format: ipv4, nullable: true }
+        metadata:
+          type: object
+          description: "Action-specific structured context."
+          additionalProperties: true
+        occurredAt: { type: string, format: date-time, readOnly: true }
+
+    AuditLogPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: { $ref: "#/components/schemas/AuditLogEntry" } }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    # ===== System =====
+    HealthCheck:
+      type: object
+      required: [status, components, checkedAt]
+      properties:
+        status: { $ref: "#/components/schemas/HealthStatus" }
+        components:
+          type: object
+          description: "Map of component name -> status."
+          additionalProperties:
+            type: object
+            required: [status]
+            properties:
+              status:    { $ref: "#/components/schemas/HealthStatus" }
+              latencyMs: { type: integer, format: int32, minimum: 0 }
+              message:   { type: string, nullable: true }
+        checkedAt: { type: string, format: date-time }
+
+    ServerInfo:
+      type: object
+      required: [version, commit, builtAt]
+      properties:
+        version:     { type: string, example: "2.0.0" }
+        commit:      { type: string, pattern: "^[0-9a-f]{7,40}$" }
+        builtAt:     { type: string, format: date-time }
+        startedAt:   { type: string, format: date-time }
+        environment: { type: string, enum: [production, staging, dev, test] }
+        rateLimits:
+          type: object
+          description: "Per-bucket rate limit info."
+          additionalProperties: { $ref: "#/components/schemas/RateLimitInfo" }
+        features:
+          type: object
+          description: "Map of feature flag -> enabled?"
+          additionalProperties: { type: boolean }

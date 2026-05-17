@@ -1,0 +1,2476 @@
+# =============================================================================
+# REFERENCE.yaml
+#
+# Single source of truth for the OpenAPI fixture specs under `specs/`.
+# There is ONE API defined here. It is rendered into three files — one per
+# OpenAPI version (Swagger 2.0, OpenAPI 3.0, OpenAPI 3.1). The CONTENT of all
+# three rendered files is the same API; only the SYNTAX is version-adjusted.
+#
+# WORKFLOW
+#   1. Edit `api:` below to add/change endpoints, schemas, security, etc.
+#   2. Ask Claude:
+#        "regenerate specs from REFERENCE.yaml"
+#        "regenerate v3.1 from REFERENCE.yaml"   (single target)
+#   3. Claude rewrites the files listed under `targets:` using `rendering_rules`.
+#
+# DIALECT (shorthand used in `api:`)
+#   ref:Foo            -> $ref to schema Foo
+#   param_ref:Foo      -> $ref to a shared parameter Foo
+#   response_ref:Foo   -> $ref to a shared response Foo
+#   nullable: true     -> nullable field; rendered per `rendering_rules.nullable`
+#   polymorphism via   `oneOf: [ref:X, ref:Y]` + `discriminator: {...}`
+#   file upload via    body.multipart  (rendered per rendering_rules.file_upload)
+#   const: VALUE       -> rendered per rendering_rules.const_keyword
+#   prefixItems:       -> rendered per rendering_rules.prefix_items
+#   webhooks:          -> rendered only in 3.1 targets
+#   additionalProperties: ref:X   -> map / dictionary value type
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Rendering rules — how cross-version concepts translate per target
+# -----------------------------------------------------------------------------
+rendering_rules:
+
+  nullable:
+    swagger-2.0:   "Drop nullability — emit only the base type. May emit `x-nullable: true` if explicit."
+    openapi-3.0.3: "Emit `nullable: true` alongside `type:`."
+    openapi-3.1.0: "Emit `type: [<base>, \"null\"]` (no `nullable` keyword)."
+
+  file_upload:
+    swagger-2.0:   "`in: formData` parameters with `type: file` / `type: string`."
+    openapi-3.x:   "`requestBody` with `multipart/form-data` content + `type: string, format: binary`."
+
+  discriminator:
+    swagger-2.0:   "No oneOf. Inline the union as a single flat object with all variant fields optional plus the discriminator field as a `string` with full enum of variant tags. Document variants in description."
+    openapi-3.x:   "`oneOf: [...]` plus `discriminator: { propertyName, mapping }`."
+
+  const_keyword:
+    pre-3.1:       "Render as single-value `enum: [VALUE]`."
+    openapi-3.1.0: "Render as `const: VALUE`."
+
+  cookie_parameter:
+    swagger-2.0:   "Not supported — drop the parameter, or convert to a header `Cookie` parameter."
+    openapi-3.x:   "Native `in: cookie`."
+
+  merge_patch_content_type:
+    swagger-2.0:   "Use `application/json` in `consumes` for PATCH bodies."
+    openapi-3.x:   "Use `application/merge-patch+json` in requestBody.content."
+
+  webhooks:
+    pre-3.1:       "Drop — not supported."
+    openapi-3.1.0: "Emit top-level `webhooks:` map."
+
+  prefix_items:
+    pre-3.1:       "Degrade to `{ type: array, items: { type: <best-fit> }, minItems: N, maxItems: N }`."
+    openapi-3.1.0: "Emit `prefixItems: [...]` with `items: false`."
+
+  multi_content_response:
+    swagger-2.0:   "Emit `produces:` with all listed media types at the operation level; response schema is the JSON one only — binary types degrade to `type: file`."
+    openapi-3.x:   "Emit one entry per media type under `response.content`."
+
+  servers_vs_host:
+    swagger-2.0:   "Derive `host` + `basePath` + `schemes` from the first target server URL."
+    openapi-3.x:   "Emit `servers:` array."
+
+  examples_keyword:
+    swagger-2.0:   "Emit single `example:` only (drop arrays)."
+    openapi-3.0.3: "Emit single `example:` or named `examples:` map on parameters/responses."
+    openapi-3.1.0: "May emit `examples: [..]` array on schemas (JSON Schema 2020-12)."
+
+  byte_format:
+    all:           "`type: string, format: byte` — base64-encoded binary payload."
+
+  binary_format:
+    swagger-2.0:   "Inside `produces` / `consumes`: `type: file`. Inside response/request bodies use `type: string, format: binary`."
+    openapi-3.x:   "`type: string, format: binary`."
+
+  additional_properties_map:
+    all:           "Emit `additionalProperties: <schema>` for dictionaries / maps."
+
+
+# -----------------------------------------------------------------------------
+# Targets — where each rendered spec goes
+# -----------------------------------------------------------------------------
+targets:
+
+  - id: v2
+    file: specs/v2-swagger.yaml
+    spec_version: swagger-2.0
+
+  - id: v3
+    file: specs/v3.0-openapi.yaml
+    spec_version: openapi-3.0.3
+
+  - id: v3_1
+    file: specs/v3.1-openapi.yaml
+    spec_version: openapi-3.1.0
+
+
+# =============================================================================
+# THE API — defined once. Rendered three times.
+# =============================================================================
+api:
+
+  title: Task Tracker API
+  summary: Multi-tenant task & project management API
+  description: |
+    Reference fixture API for the ng-openapi client generator. Covers a broad
+    surface area of a SaaS task tracker: authentication, organizations, teams,
+    projects, tasks (with custom fields, dependencies, time tracking), comments
+    with polymorphic authors and reactions, file attachments, notifications,
+    search, reports/exports (binary downloads), webhooks, and audit logging.
+
+    Designed to exercise the full range of OpenAPI features: enums, nullable
+    fields, polymorphism (oneOf + discriminator), recursive types, dictionary
+    types (additionalProperties), binary uploads/downloads with multiple
+    content types, cursor pagination, RFC 7807 problem details, cookies,
+    headers, and merge-patch bodies.
+  version: 2.0.0
+  contact: { name: "ng-openapi test suite", email: "test@example.com", url: "https://example.test/ng-openapi" }
+  license: { name: MIT, identifier: MIT, url: "https://opensource.org/licenses/MIT" }
+  terms_of_service: "https://example.test/terms"
+
+  servers:
+    - { url: "https://api.tasks.test/v1",   description: Production }
+    - { url: "https://staging.tasks.test/v1", description: Staging }
+    - { url: "http://localhost:8080/v1",    description: Local dev }
+
+  tags:
+    auth:         Authentication and session lifecycle
+    account:      Self-service account management (/me/**)
+    users:        User directory (admin / read-only listings)
+    sessions:     Active login sessions
+    apiKeys:      Personal API keys
+    organizations: Organizations / tenants
+    teams:        Teams within an organization
+    members:      Membership and invitations
+    projects:     Projects and project membership
+    tasks:        Tasks within projects
+    dependencies: Task dependencies
+    timeTracking: Time entries on tasks
+    labels:       Label definitions
+    customFields: Custom field definitions and values
+    comments:     Discussion on tasks
+    reactions:    Reactions on comments
+    attachments:  File uploads and downloads
+    notifications: User notification inbox
+    search:       Cross-entity search
+    reports:      Report generation and binary downloads
+    webhookSubs:  Webhook subscriptions (management)
+    webhookDeliveries: Webhook delivery log
+    audit:        Audit log
+    system:       Health, ping, server info
+    webhooks:     Webhook event payloads (3.1 only)
+
+  # -------- Security --------
+  security_schemes:
+    apiKey:     { type: apiKey, in: header, name: X-API-Key }
+    bearerAuth: { type: http,   scheme: bearer, bearerFormat: JWT }
+    basicAuth:  { type: http,   scheme: basic }
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.tasks.test/oauth/authorize
+          tokenUrl:         https://auth.tasks.test/oauth/token
+          refreshUrl:       https://auth.tasks.test/oauth/refresh
+          scopes:
+            "read:projects":  Read projects
+            "write:projects": Modify projects
+            "read:tasks":     Read tasks
+            "write:tasks":    Modify tasks
+            "read:reports":   Read reports
+            "write:webhooks": Manage webhook subscriptions
+            admin:            Administrative access
+        clientCredentials:
+          tokenUrl: https://auth.tasks.test/oauth/token
+          scopes: { service: "Service-to-service" }
+  default_security: [{ bearerAuth: [] }]
+
+  # -------- Shared params / responses --------
+  shared_parameters:
+    PageParam:       { in: query, name: page,     schema: { type: integer, format: int32, default: 1,  minimum: 1 } }
+    PageSizeParam:   { in: query, name: pageSize, schema: { type: integer, format: int32, default: 20, minimum: 1, maximum: 100 } }
+    SortParam:       { in: query, name: sort,     schema: { type: string, description: "Sort expression e.g. '-createdAt,name'" } }
+    AcceptLanguage:  { in: header, name: Accept-Language, schema: { type: string }, required: false }
+    IfMatchParam:    { in: header, name: If-Match, schema: { type: string }, required: false, description: "ETag for optimistic concurrency" }
+    OrgIdParam:      { in: path,  name: orgId,     required: true, schema: { type: string, format: uuid } }
+    TeamIdParam:     { in: path,  name: teamId,    required: true, schema: { type: string, format: uuid } }
+    ProjectIdParam:  { in: path,  name: projectId, required: true, schema: { type: string, format: uuid } }
+    TaskIdParam:     { in: path,  name: taskId,    required: true, schema: { type: string, format: uuid } }
+    CommentIdParam:  { in: path,  name: commentId, required: true, schema: { type: string, format: uuid } }
+    LabelIdParam:    { in: path,  name: labelId,   required: true, schema: { type: string, format: uuid } }
+
+  shared_responses:
+    BadRequest:    { description: Bad request,         content: { application/json: ref:ValidationError } }
+    Unauthorized:  { description: Unauthorized,        content: { application/json: ref:Error } }
+    Forbidden:     { description: Forbidden,           content: { application/json: ref:Error } }
+    NotFound:      { description: Resource not found,  content: { application/json: ref:Error } }
+    Conflict:      { description: Conflict,            content: { application/json: ref:Error } }
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        Retry-After: { schema: { type: integer, format: int32 }, description: "Seconds until the client may retry" }
+        X-RateLimit-Remaining: { schema: { type: integer, format: int32 } }
+      content: { application/json: ref:Error }
+    InternalError: { description: Internal server error, content: { application/json: ref:Error } }
+
+  # -------- Operations --------
+  operations:
+
+    # ===== Auth =====
+    - id: login
+      method: POST
+      path: /auth/login
+      tags: [auth]
+      summary: Exchange credentials for an access token
+      security: []
+      body: { required: true, content: { application/json: ref:LoginRequest } }
+      responses:
+        "200":
+          description: OK
+          headers:
+            Set-Cookie: { schema: { type: string }, description: "Session cookie" }
+          content: { application/json: ref:LoginResponse }
+        "401": response_ref:Unauthorized
+        "429": response_ref:TooManyRequests
+
+    - id: logout
+      method: POST
+      path: /auth/logout
+      tags: [auth]
+      summary: Revoke the current session
+      responses:
+        "204": { description: Logged out }
+
+    - id: refreshToken
+      method: POST
+      path: /auth/refresh
+      tags: [auth]
+      summary: Exchange a refresh token for a new access token
+      security: []
+      body: { required: true, content: { application/json: ref:RefreshTokenRequest } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:TokenResponse } }
+        "401": response_ref:Unauthorized
+
+    - id: register
+      method: POST
+      path: /auth/register
+      tags: [auth]
+      summary: Register a new user account
+      security: []
+      body: { required: true, content: { application/json: ref:RegisterRequest } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:User } }
+        "400": response_ref:BadRequest
+        "409": response_ref:Conflict
+
+    - id: changePassword
+      method: POST
+      path: /auth/change-password
+      tags: [auth]
+      summary: Change the authenticated user's password
+      body: { required: true, content: { application/json: ref:PasswordChangeRequest } }
+      responses:
+        "204": { description: Password changed }
+        "400": response_ref:BadRequest
+
+    - id: setup2FA
+      method: POST
+      path: /auth/2fa/setup
+      tags: [auth]
+      summary: Begin enrolling a TOTP authenticator (returns QR code blob)
+      responses:
+        "200":
+          description: TOTP setup payload — JSON metadata or raw PNG of the QR
+          content:
+            "application/json": ref:TwoFactorSetup
+            "image/png":        { type: string, format: binary }
+
+    - id: verify2FA
+      method: POST
+      path: /auth/2fa/verify
+      tags: [auth]
+      summary: Verify a TOTP code and activate 2FA
+      body: { required: true, content: { application/json: ref:TwoFactorVerifyRequest } }
+      responses:
+        "204": { description: 2FA activated }
+        "400": response_ref:BadRequest
+
+    # ===== Account / Me =====
+    - id: getCurrentUser
+      method: GET
+      path: /me
+      tags: [account]
+      summary: Get the currently authenticated user
+      params:
+        - { in: cookie, name: session, schema: { type: string }, required: false }
+        - param_ref:AcceptLanguage
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag: { schema: { type: string }, description: "Entity tag for optimistic concurrency" }
+          content: { application/json: ref:User }
+        "401": response_ref:Unauthorized
+
+    - id: updateCurrentUser
+      method: PATCH
+      path: /me
+      tags: [account]
+      summary: Update the authenticated user's profile
+      params: [param_ref:IfMatchParam]
+      body:
+        required: true
+        merge_patch: true
+        schema: ref:UserPatch
+      responses:
+        "200": { description: OK, content: { application/json: ref:User } }
+        "400": response_ref:BadRequest
+
+    - id: uploadAvatar
+      method: POST
+      path: /me/avatar
+      tags: [account]
+      summary: Upload a new avatar image
+      body:
+        required: true
+        multipart:
+          required: [file]
+          fields:
+            file: { type: file, description: "Image file (PNG/JPEG, max 5MB)" }
+            crop: { type: string, description: "Optional crop hint", maxLength: 64 }
+      responses:
+        "200": { description: OK, content: { application/json: ref:User } }
+        "413": { description: Payload too large, content: { application/json: ref:Error } }
+
+    - id: deleteAvatar
+      method: DELETE
+      path: /me/avatar
+      tags: [account]
+      summary: Remove the current avatar
+      responses:
+        "204": { description: Avatar removed }
+
+    - id: getUserPreferences
+      method: GET
+      path: /me/preferences
+      tags: [account]
+      summary: Get the authenticated user's preferences
+      responses:
+        "200": { description: OK, content: { application/json: ref:UserPreferences } }
+
+    - id: updateUserPreferences
+      method: PUT
+      path: /me/preferences
+      tags: [account]
+      summary: Replace the authenticated user's preferences
+      body: { required: true, content: { application/json: ref:UserPreferences } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:UserPreferences } }
+        "400": response_ref:BadRequest
+
+    # ===== Sessions =====
+    - id: listSessions
+      method: GET
+      path: /me/sessions
+      tags: [sessions]
+      summary: List active sessions for the current user
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { type: array, items: ref:Session } }
+
+    - id: revokeSession
+      method: DELETE
+      path: /me/sessions/{sessionId}
+      tags: [sessions]
+      summary: Revoke a specific session
+      path_params:
+        - { name: sessionId, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Revoked }
+        "404": response_ref:NotFound
+
+    # ===== API keys =====
+    - id: listApiKeys
+      method: GET
+      path: /me/api-keys
+      tags: [apiKeys]
+      summary: List the user's API keys (secrets redacted)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { type: array, items: ref:ApiKey } }
+
+    - id: createApiKey
+      method: POST
+      path: /me/api-keys
+      tags: [apiKeys]
+      summary: Create a new API key (full secret returned only here)
+      body: { required: true, content: { application/json: ref:ApiKeyCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:ApiKeyCreated } }
+
+    - id: revokeApiKey
+      method: DELETE
+      path: /me/api-keys/{keyId}
+      tags: [apiKeys]
+      summary: Revoke an API key
+      path_params:
+        - { name: keyId, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Revoked }
+        "404": response_ref:NotFound
+
+    # ===== Users directory =====
+    - id: listUsers
+      method: GET
+      path: /users
+      tags: [users]
+      summary: List users
+      params:
+        - param_ref:PageParam
+        - param_ref:PageSizeParam
+        - param_ref:SortParam
+        - { in: query, name: role, schema: ref:Role }
+        - { in: query, name: q,    schema: { type: string, minLength: 1 } }
+      responses:
+        "200":
+          description: Paginated list of users
+          headers: { X-Total-Count: { schema: { type: integer, format: int64 }, description: "Total users matching the filter" } }
+          content: { application/json: ref:UserPage }
+        "400": response_ref:BadRequest
+
+    - id: getUser
+      method: GET
+      path: /users/{userId}
+      tags: [users]
+      summary: Get a user by id
+      path_params:
+        - { name: userId, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:User } }
+        "404": response_ref:NotFound
+
+    # ===== Organizations =====
+    - id: listOrganizations
+      method: GET
+      path: /organizations
+      tags: [organizations]
+      summary: List organizations visible to the caller
+      params: [param_ref:PageParam, param_ref:PageSizeParam]
+      responses:
+        "200": { description: OK, content: { application/json: ref:OrganizationPage } }
+
+    - id: createOrganization
+      method: POST
+      path: /organizations
+      tags: [organizations]
+      summary: Create a new organization
+      body: { required: true, content: { application/json: ref:OrganizationCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Organization } }
+        "409": response_ref:Conflict
+
+    - id: getOrganization
+      method: GET
+      path: /organizations/{orgId}
+      tags: [organizations]
+      path_params: [param_ref:OrgIdParam]
+      summary: Get an organization
+      responses:
+        "200": { description: OK, content: { application/json: ref:Organization } }
+        "404": response_ref:NotFound
+
+    - id: patchOrganization
+      method: PATCH
+      path: /organizations/{orgId}
+      tags: [organizations]
+      summary: Partially update an organization
+      path_params: [param_ref:OrgIdParam]
+      body: { required: true, merge_patch: true, schema: ref:OrganizationPatch }
+      responses:
+        "200": { description: OK, content: { application/json: ref:Organization } }
+        "404": response_ref:NotFound
+
+    - id: deleteOrganization
+      method: DELETE
+      path: /organizations/{orgId}
+      tags: [organizations]
+      summary: Delete an organization
+      security: [{ oauth2: [admin] }]
+      path_params: [param_ref:OrgIdParam]
+      responses:
+        "204": { description: Deleted }
+        "404": response_ref:NotFound
+
+    # ===== Teams =====
+    - id: listTeams
+      method: GET
+      path: /organizations/{orgId}/teams
+      tags: [teams]
+      summary: List teams in an organization
+      path_params: [param_ref:OrgIdParam]
+      params: [param_ref:PageParam, param_ref:PageSizeParam]
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:Team } } }
+
+    - id: createTeam
+      method: POST
+      path: /organizations/{orgId}/teams
+      tags: [teams]
+      summary: Create a team
+      path_params: [param_ref:OrgIdParam]
+      body: { required: true, content: { application/json: ref:TeamCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Team } }
+
+    - id: listTeamMembers
+      method: GET
+      path: /teams/{teamId}/members
+      tags: [members]
+      summary: List members of a team
+      path_params: [param_ref:TeamIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:Membership } } }
+
+    - id: inviteMember
+      method: POST
+      path: /teams/{teamId}/invitations
+      tags: [members]
+      summary: Invite a user to a team
+      path_params: [param_ref:TeamIdParam]
+      body: { required: true, content: { application/json: ref:InvitationCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Invitation } }
+        "409": response_ref:Conflict
+
+    - id: acceptInvitation
+      method: POST
+      path: /invitations/{invitationId}/accept
+      tags: [members]
+      summary: Accept an invitation
+      path_params:
+        - { name: invitationId, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:Membership } }
+        "404": response_ref:NotFound
+        "410": { description: Invitation expired, content: { application/json: ref:Error } }
+
+    # ===== Projects =====
+    - id: listProjects
+      method: GET
+      path: /projects
+      tags: [projects]
+      summary: List projects
+      params:
+        - param_ref:PageParam
+        - param_ref:PageSizeParam
+        - param_ref:SortParam
+        - { in: query, name: status,     schema: ref:ProjectStatus }
+        - { in: query, name: visibility, schema: ref:Visibility }
+        - { in: query, name: tag, style: form, explode: true, schema: { type: array, items: { type: string } } }
+        - { in: query, name: createdAfter, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:ProjectPage } }
+
+    - id: createProject
+      method: POST
+      path: /projects
+      tags: [projects]
+      summary: Create a project
+      security: [{ oauth2: ["write:projects"] }]
+      body: { required: true, content: { application/json: ref:ProjectCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Project } }
+        "400": response_ref:BadRequest
+        "409": response_ref:Conflict
+
+    - id: getProject
+      method: GET
+      path: /projects/{projectId}
+      tags: [projects]
+      summary: Get a project
+      path_params: [param_ref:ProjectIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: ref:Project } }
+        "404": response_ref:NotFound
+
+    - id: patchProject
+      method: PATCH
+      path: /projects/{projectId}
+      tags: [projects]
+      summary: Partially update a project
+      security: [{ oauth2: ["write:projects"] }]
+      path_params: [param_ref:ProjectIdParam]
+      body:
+        required: true
+        merge_patch: true
+        schema: ref:ProjectPatch
+      responses:
+        "200": { description: OK, content: { application/json: ref:Project } }
+        "404": response_ref:NotFound
+
+    - id: deleteProject
+      method: DELETE
+      path: /projects/{projectId}
+      tags: [projects]
+      summary: Delete a project
+      security: [{ oauth2: [admin] }]
+      path_params: [param_ref:ProjectIdParam]
+      responses:
+        "204": { description: Deleted }
+        "404": response_ref:NotFound
+
+    - id: exportProjects
+      method: GET
+      path: /projects/export
+      tags: [projects]
+      summary: Export projects as a binary download
+      params:
+        - { in: query, name: format, required: true, schema: ref:ExportFormat }
+      responses:
+        "200":
+          description: Binary export
+          headers:
+            Content-Disposition: { schema: { type: string }, description: "attachment; filename=\"projects.csv\"" }
+          content:
+            "text/csv":                 { type: string, format: binary }
+            "application/json":         { type: string, format: binary }
+            "application/zip":          { type: string, format: binary }
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { type: string, format: binary }
+        "400": response_ref:BadRequest
+
+    # ===== Labels =====
+    - id: listLabels
+      method: GET
+      path: /projects/{projectId}/labels
+      tags: [labels]
+      summary: List labels defined on a project
+      path_params: [param_ref:ProjectIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:Label } } }
+
+    - id: createLabel
+      method: POST
+      path: /projects/{projectId}/labels
+      tags: [labels]
+      summary: Create a label
+      path_params: [param_ref:ProjectIdParam]
+      body: { required: true, content: { application/json: ref:LabelCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Label } }
+        "409": response_ref:Conflict
+
+    - id: deleteLabel
+      method: DELETE
+      path: /labels/{labelId}
+      tags: [labels]
+      summary: Delete a label
+      path_params: [param_ref:LabelIdParam]
+      responses:
+        "204": { description: Deleted }
+        "404": response_ref:NotFound
+
+    # ===== Custom Fields =====
+    - id: listCustomFields
+      method: GET
+      path: /projects/{projectId}/custom-fields
+      tags: [customFields]
+      summary: List custom field definitions on a project
+      path_params: [param_ref:ProjectIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:CustomFieldDefinition } } }
+
+    - id: createCustomField
+      method: POST
+      path: /projects/{projectId}/custom-fields
+      tags: [customFields]
+      summary: Define a new custom field on a project
+      path_params: [param_ref:ProjectIdParam]
+      body: { required: true, content: { application/json: ref:CustomFieldDefinitionCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:CustomFieldDefinition } }
+
+    - id: setTaskCustomFieldValue
+      method: PUT
+      path: /tasks/{taskId}/custom-fields/{fieldId}
+      tags: [customFields]
+      summary: Set the value of a custom field on a task (polymorphic value)
+      path_params:
+        - param_ref:TaskIdParam
+        - { name: fieldId, schema: { type: string, format: uuid } }
+      body: { required: true, content: { application/json: ref:CustomFieldValue } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:CustomFieldValue } }
+        "400": response_ref:BadRequest
+
+    # ===== Tasks =====
+    - id: listProjectTasks
+      method: GET
+      path: /projects/{projectId}/tasks
+      tags: [tasks]
+      summary: List tasks in a project (cursor-paginated)
+      path_params: [param_ref:ProjectIdParam]
+      params:
+        - { in: query, name: cursor, schema: { type: string, nullable: true } }
+        - { in: query, name: limit,  schema: { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 } }
+        - { in: query, name: status, style: form, explode: true, schema: { type: array, items: ref:TaskStatus } }
+        - { in: query, name: assignee, schema: { type: string, format: uuid } }
+        - { in: query, name: priority, schema: ref:Priority }
+        - { in: query, name: dueBefore, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:TaskCursorPage } }
+        "404": response_ref:NotFound
+
+    - id: createTask
+      method: POST
+      path: /projects/{projectId}/tasks
+      tags: [tasks]
+      summary: Create a task in a project
+      security: [{ oauth2: ["write:tasks"] }]
+      path_params: [param_ref:ProjectIdParam]
+      params:
+        - { in: header, name: X-Idempotency-Key, required: true, schema: { type: string, format: uuid } }
+      body: { required: true, content: { application/json: ref:TaskCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Task } }
+        "400": response_ref:BadRequest
+
+    - id: bulkCreateTasks
+      method: POST
+      path: /projects/{projectId}/tasks/bulk
+      tags: [tasks]
+      summary: Create many tasks in a single request
+      security: [{ oauth2: ["write:tasks"] }]
+      path_params: [param_ref:ProjectIdParam]
+      body: { required: true, content: { application/json: ref:BulkTaskCreate } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:BulkOperationResult } }
+        "400": response_ref:BadRequest
+
+    - id: importTasks
+      method: POST
+      path: /projects/{projectId}/tasks/import
+      tags: [tasks]
+      summary: Import tasks from an uploaded file (CSV/JSON/XLSX)
+      path_params: [param_ref:ProjectIdParam]
+      body:
+        required: true
+        multipart:
+          required: [file, format]
+          fields:
+            file:     { type: file, description: "Tasks file" }
+            format:   { type: string, enum: [csv, json, xlsx] }
+            dryRun:   { type: boolean, default: false }
+      responses:
+        "202": { description: Accepted, content: { application/json: ref:ImportJob } }
+        "400": response_ref:BadRequest
+
+    - id: getTask
+      method: GET
+      path: /tasks/{taskId}
+      tags: [tasks]
+      summary: Get a task
+      path_params: [param_ref:TaskIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: ref:Task } }
+        "404": response_ref:NotFound
+
+    - id: getTaskTree
+      method: GET
+      path: /tasks/{taskId}/tree
+      tags: [tasks]
+      summary: Get a task and its full subtask tree (recursive)
+      path_params: [param_ref:TaskIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: ref:TaskTree } }
+        "404": response_ref:NotFound
+
+    - id: patchTask
+      method: PATCH
+      path: /tasks/{taskId}
+      tags: [tasks]
+      summary: Partially update a task
+      security: [{ oauth2: ["write:tasks"] }]
+      path_params: [param_ref:TaskIdParam]
+      body:
+        required: true
+        merge_patch: true
+        schema: ref:TaskPatch
+      responses:
+        "200": { description: OK, content: { application/json: ref:Task } }
+        "404": response_ref:NotFound
+
+    - id: deleteTask
+      method: DELETE
+      path: /tasks/{taskId}
+      tags: [tasks]
+      summary: Delete a task
+      security: [{ oauth2: [admin] }]
+      path_params: [param_ref:TaskIdParam]
+      responses:
+        "204": { description: Deleted }
+        "404": response_ref:NotFound
+
+    - id: assignTask
+      method: POST
+      path: /tasks/{taskId}/assignees
+      tags: [tasks]
+      summary: Add an assignee to a task
+      path_params: [param_ref:TaskIdParam]
+      body:
+        required: true
+        content:
+          application/json:
+            type: object
+            required: [userId]
+            properties:
+              userId: ref:Id
+      responses:
+        "200": { description: OK, content: { application/json: ref:Task } }
+
+    - id: unassignTask
+      method: DELETE
+      path: /tasks/{taskId}/assignees/{userId}
+      tags: [tasks]
+      summary: Remove an assignee from a task
+      path_params:
+        - param_ref:TaskIdParam
+        - { name: userId, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Removed }
+
+    # ===== Task dependencies =====
+    - id: listTaskDependencies
+      method: GET
+      path: /tasks/{taskId}/dependencies
+      tags: [dependencies]
+      summary: List dependencies declared on a task
+      path_params: [param_ref:TaskIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:TaskDependency } } }
+
+    - id: addTaskDependency
+      method: POST
+      path: /tasks/{taskId}/dependencies
+      tags: [dependencies]
+      summary: Declare a dependency between two tasks
+      path_params: [param_ref:TaskIdParam]
+      body: { required: true, content: { application/json: ref:TaskDependencyCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:TaskDependency } }
+        "409": response_ref:Conflict
+
+    # ===== Time tracking =====
+    - id: listTimeEntries
+      method: GET
+      path: /tasks/{taskId}/time-entries
+      tags: [timeTracking]
+      summary: List time entries logged against a task
+      path_params: [param_ref:TaskIdParam]
+      params: [param_ref:PageParam, param_ref:PageSizeParam]
+      responses:
+        "200": { description: OK, content: { application/json: ref:TimeEntryPage } }
+
+    - id: createTimeEntry
+      method: POST
+      path: /tasks/{taskId}/time-entries
+      tags: [timeTracking]
+      summary: Log a time entry against a task
+      path_params: [param_ref:TaskIdParam]
+      body: { required: true, content: { application/json: ref:TimeEntryCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:TimeEntry } }
+
+    # ===== Comments =====
+    - id: listTaskComments
+      method: GET
+      path: /tasks/{taskId}/comments
+      tags: [comments]
+      summary: List comments on a task
+      path_params: [param_ref:TaskIdParam]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { type: array, items: ref:Comment } }
+
+    - id: createTaskComment
+      method: POST
+      path: /tasks/{taskId}/comments
+      tags: [comments]
+      summary: Add a comment to a task (polymorphic author)
+      path_params: [param_ref:TaskIdParam]
+      body: { required: true, content: { application/json: ref:CommentInput } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Comment } }
+        "400": response_ref:BadRequest
+
+    - id: patchComment
+      method: PATCH
+      path: /comments/{commentId}
+      tags: [comments]
+      summary: Edit an existing comment
+      path_params: [param_ref:CommentIdParam]
+      body:
+        required: true
+        merge_patch: true
+        schema: ref:CommentPatch
+      responses:
+        "200": { description: OK, content: { application/json: ref:Comment } }
+
+    - id: deleteComment
+      method: DELETE
+      path: /comments/{commentId}
+      tags: [comments]
+      summary: Delete a comment
+      path_params: [param_ref:CommentIdParam]
+      responses:
+        "204": { description: Deleted }
+
+    # ===== Reactions =====
+    - id: addReaction
+      method: POST
+      path: /comments/{commentId}/reactions
+      tags: [reactions]
+      summary: React to a comment
+      path_params: [param_ref:CommentIdParam]
+      body: { required: true, content: { application/json: ref:ReactionCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Reaction } }
+
+    - id: removeReaction
+      method: DELETE
+      path: /comments/{commentId}/reactions/{reactionType}
+      tags: [reactions]
+      summary: Remove a reaction from a comment
+      path_params:
+        - param_ref:CommentIdParam
+        - { name: reactionType, schema: ref:ReactionType }
+      responses:
+        "204": { description: Removed }
+
+    # ===== Attachments =====
+    - id: listAttachments
+      method: GET
+      path: /tasks/{taskId}/attachments
+      tags: [attachments]
+      summary: List attachments on a task
+      path_params: [param_ref:TaskIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: ref:AttachmentPage } }
+
+    - id: uploadAttachment
+      method: POST
+      path: /tasks/{taskId}/attachments
+      tags: [attachments]
+      summary: Upload an attachment to a task
+      path_params: [param_ref:TaskIdParam]
+      body:
+        required: true
+        multipart:
+          required: [file]
+          fields:
+            file:        { type: file, description: "Binary file" }
+            description: { type: string, maxLength: 500 }
+            tags:        { type: array, items: { type: string } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Attachment } }
+        "413": { description: Payload too large, content: { application/json: ref:Error } }
+
+    - id: downloadAttachment
+      method: GET
+      path: /tasks/{taskId}/attachments/{attachmentId}
+      tags: [attachments]
+      summary: Download an attachment's binary content
+      path_params:
+        - param_ref:TaskIdParam
+        - { name: attachmentId, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binary attachment
+          headers:
+            Content-Disposition: { schema: { type: string }, description: "attachment; filename=..." }
+            ETag:                { schema: { type: string } }
+          content:
+            "application/octet-stream": { type: string, format: binary }
+            "image/png":                { type: string, format: binary }
+            "image/jpeg":               { type: string, format: binary }
+            "application/pdf":          { type: string, format: binary }
+        "404": response_ref:NotFound
+
+    - id: deleteAttachment
+      method: DELETE
+      path: /tasks/{taskId}/attachments/{attachmentId}
+      tags: [attachments]
+      summary: Delete an attachment
+      path_params:
+        - param_ref:TaskIdParam
+        - { name: attachmentId, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deleted }
+
+    - id: createPresignedUpload
+      method: POST
+      path: /attachments/presigned-upload
+      tags: [attachments]
+      summary: Get a presigned URL for direct upload to object storage
+      body:
+        required: true
+        content:
+          application/json:
+            type: object
+            required: [filename, contentType]
+            properties:
+              filename:    { type: string, maxLength: 255 }
+              contentType: { type: string }
+              sizeBytes:   { type: integer, format: int64, minimum: 0 }
+      responses:
+        "200": { description: OK, content: { application/json: ref:PresignedUploadUrl } }
+
+    # ===== Notifications =====
+    - id: listNotifications
+      method: GET
+      path: /me/notifications
+      tags: [notifications]
+      summary: List notifications for the current user
+      params:
+        - param_ref:PageParam
+        - param_ref:PageSizeParam
+        - { in: query, name: unreadOnly, schema: { type: boolean, default: false } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:NotificationPage } }
+
+    - id: markNotificationRead
+      method: POST
+      path: /me/notifications/{notificationId}/read
+      tags: [notifications]
+      summary: Mark a notification as read
+      path_params:
+        - { name: notificationId, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Marked }
+
+    - id: markAllNotificationsRead
+      method: POST
+      path: /me/notifications/read-all
+      tags: [notifications]
+      summary: Mark all notifications as read
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              type: object
+              required: [readCount]
+              properties:
+                readCount: { type: integer, format: int32, minimum: 0 }
+
+    # ===== Search =====
+    - id: search
+      method: POST
+      path: /search
+      tags: [search]
+      summary: Cross-entity search (returns polymorphic hits)
+      body: { required: true, content: { application/json: ref:SearchRequest } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:SearchResponse } }
+
+    # ===== Reports =====
+    - id: requestReport
+      method: POST
+      path: /reports
+      tags: [reports]
+      summary: Request asynchronous report generation
+      security: [{ oauth2: ["read:reports"] }]
+      body: { required: true, content: { application/json: ref:ReportRequest } }
+      responses:
+        "202":
+          description: Accepted — generation started
+          headers:
+            Location: { schema: { type: string, format: uri }, description: "URL of the report job" }
+          content: { application/json: ref:ReportJob }
+
+    - id: getReport
+      method: GET
+      path: /reports/{reportId}
+      tags: [reports]
+      summary: Get the metadata of a report job
+      path_params:
+        - { name: reportId, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:ReportJob } }
+        "404": response_ref:NotFound
+
+    - id: downloadReport
+      method: GET
+      path: /reports/{reportId}/download
+      tags: [reports]
+      summary: Download the rendered report (binary blob in many formats)
+      path_params:
+        - { name: reportId, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binary report
+          headers:
+            Content-Disposition: { schema: { type: string } }
+          content:
+            "application/pdf":  { type: string, format: binary }
+            "text/csv":         { type: string, format: binary }
+            "application/json": { type: string, format: binary }
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { type: string, format: binary }
+        "404": response_ref:NotFound
+        "409": { description: "Report not ready yet", content: { application/json: ref:Error } }
+
+    # ===== Webhook subscriptions =====
+    - id: listWebhookSubscriptions
+      method: GET
+      path: /webhook-subscriptions
+      tags: [webhookSubs]
+      summary: List webhook subscriptions
+      security: [{ oauth2: ["write:webhooks"] }]
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:WebhookSubscription } } }
+
+    - id: createWebhookSubscription
+      method: POST
+      path: /webhook-subscriptions
+      tags: [webhookSubs]
+      summary: Create a webhook subscription
+      security: [{ oauth2: ["write:webhooks"] }]
+      body: { required: true, content: { application/json: ref:WebhookSubscriptionCreate } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:WebhookSubscription } }
+
+    - id: deleteWebhookSubscription
+      method: DELETE
+      path: /webhook-subscriptions/{subId}
+      tags: [webhookSubs]
+      summary: Delete a webhook subscription
+      security: [{ oauth2: ["write:webhooks"] }]
+      path_params:
+        - { name: subId, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deleted }
+
+    - id: listWebhookDeliveries
+      method: GET
+      path: /webhook-subscriptions/{subId}/deliveries
+      tags: [webhookDeliveries]
+      summary: List delivery attempts for a webhook subscription
+      path_params:
+        - { name: subId, schema: { type: string, format: uuid } }
+      params:
+        - param_ref:PageParam
+        - param_ref:PageSizeParam
+        - { in: query, name: status, schema: ref:WebhookDeliveryStatus }
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:WebhookDelivery } } }
+
+    # ===== Audit log =====
+    - id: listAuditLog
+      method: GET
+      path: /audit-log
+      tags: [audit]
+      summary: List audit log entries
+      security: [{ oauth2: [admin] }]
+      params:
+        - param_ref:PageParam
+        - param_ref:PageSizeParam
+        - { in: query, name: action, schema: ref:AuditAction }
+        - { in: query, name: actorId, schema: { type: string, format: uuid } }
+        - { in: query, name: from, schema: { type: string, format: date-time } }
+        - { in: query, name: to,   schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:AuditLogPage } }
+
+    # ===== System =====
+    - id: ping
+      method: GET
+      path: /ping
+      tags: [system]
+      summary: Liveness check (plain text)
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            "text/plain":
+              type: string
+              example: "pong"
+
+    - id: health
+      method: GET
+      path: /health
+      tags: [system]
+      summary: Aggregated component health
+      security: []
+      responses:
+        "200": { description: OK,           content: { application/json: ref:HealthCheck } }
+        "503": { description: Degraded,     content: { application/json: ref:HealthCheck } }
+
+    - id: serverInfo
+      method: GET
+      path: /server-info
+      tags: [system]
+      summary: Build / version info for the running server
+      security: []
+      responses:
+        "200": { description: OK, content: { application/json: ref:ServerInfo } }
+
+  # -------- Webhooks (3.1 only) --------
+  webhooks:
+
+    taskCreated:
+      method: POST
+      operationId: onTaskCreated
+      summary: Emitted when a task is created
+      body: { required: true, content: { application/json: ref:TaskCreatedEvent } }
+      responses: { "200": { description: Acknowledged } }
+
+    taskStatusChanged:
+      method: POST
+      operationId: onTaskStatusChanged
+      summary: Emitted when a task's status changes
+      body: { required: true, content: { application/json: ref:TaskStatusChangedEvent } }
+      responses: { "200": { description: Acknowledged } }
+
+    commentCreated:
+      method: POST
+      operationId: onCommentCreated
+      summary: Emitted when a new comment is added
+      body: { required: true, content: { application/json: ref:CommentCreatedEvent } }
+      responses: { "200": { description: Acknowledged } }
+
+    attachmentUploaded:
+      method: POST
+      operationId: onAttachmentUploaded
+      summary: Emitted when an attachment is uploaded
+      body: { required: true, content: { application/json: ref:AttachmentUploadedEvent } }
+      responses: { "200": { description: Acknowledged } }
+
+    projectArchived:
+      method: POST
+      operationId: onProjectArchived
+      summary: Emitted when a project is archived
+      body: { required: true, content: { application/json: ref:ProjectArchivedEvent } }
+      responses: { "200": { description: Acknowledged } }
+
+  # -------- Schemas --------
+  schemas:
+
+    # ===== Primitives & shared =====
+    Id:   { type: string, format: uuid }
+    Slug: { type: string, pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$", maxLength: 64 }
+
+    # ===== Enums =====
+    Role:
+      type: string
+      enum: [guest, member, admin]
+      description: Top-level platform role.
+
+    MembershipRole:
+      type: string
+      enum: [owner, admin, maintainer, contributor, viewer]
+      description: Per-team/per-project role.
+
+    ProjectStatus:
+      type: string
+      enum: [planning, active, on_hold, archived]
+
+    Visibility:
+      type: string
+      enum: [private, internal, public]
+
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, blocked, in_review, done, cancelled]
+
+    Priority:
+      type: string
+      enum: [low, normal, high, urgent]
+      default: normal
+
+    Severity:
+      type: string
+      enum: [info, low, medium, high, critical]
+
+    NotificationChannel:
+      type: string
+      enum: [email, push, sms, webhook, in_app]
+
+    NotificationType:
+      type: string
+      enum:
+        - task.assigned
+        - task.status_changed
+        - task.commented
+        - comment.mentioned
+        - project.invited
+        - report.ready
+
+    Locale:
+      type: string
+      enum: [en-US, en-GB, fr-FR, de-DE, es-ES, ja-JP, pt-BR, zh-CN]
+
+    Currency:
+      type: string
+      enum: [USD, EUR, GBP, JPY, CAD, AUD, BRL]
+
+    DayOfWeek:
+      type: string
+      enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+
+    TimeUnit:
+      type: string
+      enum: [minutes, hours, days, weeks]
+
+    DependencyType:
+      type: string
+      enum: [blocks, is_blocked_by, relates_to, duplicates, duplicated_by]
+
+    ReactionType:
+      type: string
+      enum: ["+1", "-1", laugh, hooray, confused, heart, rocket, eyes]
+
+    WebhookEvent:
+      type: string
+      enum:
+        - task.created
+        - task.updated
+        - task.status_changed
+        - task.deleted
+        - comment.created
+        - attachment.uploaded
+        - project.archived
+
+    WebhookDeliveryStatus:
+      type: string
+      enum: [pending, success, failed, retrying]
+
+    ReportFormat:
+      type: string
+      enum: [pdf, csv, json, xlsx]
+
+    ExportFormat:
+      type: string
+      enum: [csv, json, zip, xlsx]
+
+    ReportStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+
+    ImportJobStatus:
+      type: string
+      enum: [pending, running, succeeded, partial, failed]
+
+    AuditAction:
+      type: string
+      enum:
+        - user.login
+        - user.logout
+        - project.created
+        - project.deleted
+        - task.created
+        - task.deleted
+        - api_key.created
+        - api_key.revoked
+        - webhook.created
+
+    ApiKeyScope:
+      type: string
+      enum: [read, write, admin]
+
+    SearchEntityType:
+      type: string
+      enum: [project, task, user, comment]
+
+    InvitationStatus:
+      type: string
+      enum: [pending, accepted, declined, expired, revoked]
+
+    HealthStatus:
+      type: string
+      enum: [up, degraded, down]
+
+    CustomFieldType:
+      type: string
+      enum: [string, number, date, boolean, enum, multi_enum]
+
+    # ===== Generic value objects =====
+    GeoPoint:
+      description: "Tuple of [longitude, latitude]."
+      type: array
+      prefixItems:
+        - { type: number, minimum: -180, maximum: 180, description: longitude }
+        - { type: number, minimum: -90,  maximum: 90,  description: latitude }
+      items: false
+      minItems: 2
+      maxItems: 2
+
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:   { type: number, format: double, description: "Decimal amount (use string in strict-decimal clients)" }
+        currency: ref:Currency
+
+    Address:
+      type: object
+      required: [country]
+      properties:
+        line1:      { type: string, maxLength: 200 }
+        line2:      { type: string, maxLength: 200, nullable: true }
+        city:       { type: string, maxLength: 100 }
+        region:     { type: string, maxLength: 100, nullable: true }
+        postalCode: { type: string, maxLength: 20,  nullable: true }
+        country:    { type: string, minLength: 2, maxLength: 2, description: "ISO 3166-1 alpha-2 country code" }
+
+    RateLimitInfo:
+      type: object
+      required: [limit, remaining, resetAt]
+      properties:
+        limit:     { type: integer, format: int32, minimum: 0 }
+        remaining: { type: integer, format: int32, minimum: 0 }
+        resetAt:   { type: string, format: date-time }
+
+    # ===== Error envelopes =====
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:    { type: string, description: "Stable machine-readable error code" }
+        message: { type: string }
+        traceId: { type: string, nullable: true }
+        details:
+          description: "Free-form error context — map of arbitrary primitive values."
+          type: object
+          additionalProperties: { type: string }
+
+    ValidationError:
+      allOf:
+        - ref:Error
+        - type: object
+          required: [fields]
+          properties:
+            fields:
+              type: array
+              items:
+                type: object
+                required: [path, issue]
+                properties:
+                  path:  { type: string, description: "JSON pointer to the offending field" }
+                  issue: { type: string }
+                  value: { description: "Submitted value (best-effort)", nullable: true }
+
+    # ===== Users / account =====
+    User:
+      type: object
+      required: [id, email, name, role, status, createdAt]
+      properties:
+        id:        ref:Id
+        email:     { type: string, format: email }
+        name:      { type: string, minLength: 1, maxLength: 200 }
+        role:      ref:Role
+        status:    { type: string, enum: [active, suspended, invited], default: active }
+        avatarUrl: { type: string, format: uri, nullable: true }
+        bio:       { type: string, maxLength: 500, nullable: true }
+        locale:    { allOf: [ref:Locale], nullable: true }
+        timezone:  { type: string, nullable: true, example: "America/New_York" }
+        phone:     { type: string, nullable: true, example: "+1-555-0123" }
+        address:   { allOf: [ref:Address], nullable: true }
+        twoFactorEnabled: { type: boolean, default: false }
+        labels:    { type: object, additionalProperties: { type: string }, description: "Free-form key/value labels on the user (map type)." }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true, nullable: true }
+        lastLoginAt: { type: string, format: date-time, readOnly: true, nullable: true }
+
+    UserPatch:
+      type: object
+      properties:
+        name:     { type: string }
+        bio:      { type: string, nullable: true }
+        locale:   ref:Locale
+        timezone: { type: string, nullable: true }
+        phone:    { type: string, nullable: true }
+        address:  { allOf: [ref:Address], nullable: true }
+
+    UserPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: ref:User }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    UserPreferences:
+      type: object
+      required: [locale, timezone, theme]
+      properties:
+        locale:    ref:Locale
+        timezone:  { type: string, example: "Europe/Berlin" }
+        theme:     { type: string, enum: [light, dark, system], default: system }
+        weekStart: ref:DayOfWeek
+        notifications:
+          type: object
+          description: "Map of NotificationType -> array of channels enabled for that type."
+          additionalProperties:
+            type: array
+            items: ref:NotificationChannel
+        digestFrequency: { type: string, enum: [never, daily, weekly], default: weekly }
+
+    Session:
+      type: object
+      required: [id, createdAt, ipAddress, userAgent, current]
+      properties:
+        id:         ref:Id
+        createdAt:  { type: string, format: date-time }
+        expiresAt:  { type: string, format: date-time, nullable: true }
+        ipAddress:  { type: string, format: ipv4 }
+        ipAddressV6: { type: string, format: ipv6, nullable: true }
+        userAgent:  { type: string, maxLength: 500 }
+        location:   { allOf: [ref:GeoPoint], nullable: true }
+        current:    { type: boolean }
+
+    # ===== Auth payloads =====
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password, writeOnly: true, minLength: 8 }
+        totp:     { type: string, pattern: "^[0-9]{6}$", nullable: true }
+
+    LoginResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string, nullable: true }
+        tokenType:    { const: Bearer }
+        expiresIn:    { type: integer, format: int32, description: "Lifetime in seconds" }
+        user:         ref:User
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string, nullable: true }
+        tokenType:    { const: Bearer }
+        expiresIn:    { type: integer, format: int32 }
+
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password, writeOnly: true, minLength: 8, maxLength: 128 }
+        name:     { type: string, minLength: 1, maxLength: 200 }
+        locale:   ref:Locale
+        inviteToken: { type: string, nullable: true }
+
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password, writeOnly: true }
+        newPassword:     { type: string, format: password, writeOnly: true, minLength: 8 }
+
+    TwoFactorSetup:
+      type: object
+      required: [secret, otpAuthUrl, qrPng]
+      properties:
+        secret:     { type: string, description: "Base32 TOTP secret" }
+        otpAuthUrl: { type: string, format: uri }
+        qrPng:      { type: string, format: byte, description: "Base64-encoded PNG of the QR code" }
+        recoveryCodes:
+          type: array
+          items: { type: string }
+          minItems: 8
+          maxItems: 16
+
+    TwoFactorVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: "^[0-9]{6}$" }
+
+    # ===== API keys =====
+    ApiKey:
+      type: object
+      required: [id, name, prefix, scopes, createdAt]
+      properties:
+        id:        ref:Id
+        name:      { type: string, minLength: 1, maxLength: 100 }
+        prefix:    { type: string, description: "First 8 characters of the secret (full secret never returned again)" }
+        scopes:    { type: array, items: ref:ApiKeyScope, uniqueItems: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        lastUsedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    ApiKeyCreate:
+      type: object
+      required: [name, scopes]
+      properties:
+        name:      { type: string, minLength: 1, maxLength: 100 }
+        scopes:    { type: array, items: ref:ApiKeyScope, minItems: 1 }
+        expiresAt: { type: string, format: date-time, nullable: true }
+
+    ApiKeyCreated:
+      allOf:
+        - ref:ApiKey
+        - type: object
+          required: [secret]
+          properties:
+            secret: { type: string, writeOnly: true, description: "Full secret — shown only on creation" }
+
+    # ===== Organizations =====
+    Organization:
+      type: object
+      required: [id, name, slug, createdAt]
+      properties:
+        id:          ref:Id
+        name:        { type: string, minLength: 1, maxLength: 200 }
+        slug:        ref:Slug
+        description: { type: string, nullable: true, maxLength: 5000 }
+        billingEmail: { type: string, format: email, nullable: true }
+        address:     { allOf: [ref:Address], nullable: true }
+        plan:        { type: string, enum: [free, team, business, enterprise], default: free }
+        seatsUsed:   { type: integer, format: int32, minimum: 0 }
+        seatsTotal:  { type: integer, format: int32, minimum: 0 }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+
+    OrganizationCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name:        { type: string }
+        slug:        ref:Slug
+        description: { type: string, nullable: true }
+        billingEmail: { type: string, format: email, nullable: true }
+
+    OrganizationPatch:
+      type: object
+      properties:
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        billingEmail: { type: string, format: email, nullable: true }
+        address:     { allOf: [ref:Address], nullable: true }
+
+    OrganizationPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: ref:Organization }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    # ===== Teams =====
+    Team:
+      type: object
+      required: [id, orgId, name, createdAt]
+      properties:
+        id:        ref:Id
+        orgId:     ref:Id
+        name:      { type: string, minLength: 1, maxLength: 200 }
+        slug:      ref:Slug
+        description: { type: string, nullable: true }
+        memberCount: { type: integer, format: int32, minimum: 0, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    TeamCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: ref:Slug
+        description: { type: string, nullable: true }
+
+    Membership:
+      type: object
+      required: [userId, teamId, role, joinedAt]
+      properties:
+        userId:   ref:Id
+        teamId:   ref:Id
+        role:     ref:MembershipRole
+        joinedAt: { type: string, format: date-time, readOnly: true }
+        user:     { allOf: [ref:User], nullable: true, description: "Optionally inlined when expanded" }
+
+    Invitation:
+      type: object
+      required: [id, email, teamId, role, status, createdAt]
+      properties:
+        id:        ref:Id
+        email:     { type: string, format: email }
+        teamId:    ref:Id
+        role:      ref:MembershipRole
+        status:    ref:InvitationStatus
+        token:     { type: string, writeOnly: true, description: "Acceptance token (never returned after creation)" }
+        invitedBy: ref:Id
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    InvitationCreate:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        role:  ref:MembershipRole
+
+    # ===== Projects =====
+    Project:
+      type: object
+      required: [id, orgId, name, slug, status, visibility, ownerId, createdAt, updatedAt]
+      properties:
+        id:          ref:Id
+        orgId:       ref:Id
+        name:        { type: string, minLength: 1, maxLength: 200 }
+        slug:        ref:Slug
+        description: { type: string, maxLength: 5000, nullable: true }
+        status:      ref:ProjectStatus
+        visibility:  ref:Visibility
+        ownerId:     ref:Id
+        memberIds:   { type: array, items: ref:Id, uniqueItems: true }
+        tags:        { type: array, items: { type: string, maxLength: 40 }, uniqueItems: true }
+        color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", nullable: true, example: "#3366ff" }
+        budget:      { allOf: [ref:Money], nullable: true }
+        startDate:   { type: string, format: date, nullable: true }
+        endDate:     { type: string, format: date, nullable: true }
+        progress:    { type: number, format: float, minimum: 0, maximum: 1, readOnly: true }
+        taskCount:   { type: integer, format: int32, minimum: 0, readOnly: true }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+        updatedAt:   { type: string, format: date-time, readOnly: true }
+        archivedAt:  { type: string, format: date-time, nullable: true, readOnly: true }
+
+    ProjectCreate:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string, minLength: 1, maxLength: 200 }
+        slug:        ref:Slug
+        description: { type: string, nullable: true }
+        visibility:  ref:Visibility
+        memberIds:   { type: array, items: ref:Id }
+        tags:        { type: array, items: { type: string } }
+        color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", nullable: true }
+        budget:      { allOf: [ref:Money], nullable: true }
+        startDate:   { type: string, format: date, nullable: true }
+        endDate:     { type: string, format: date, nullable: true }
+
+    ProjectPatch:
+      type: object
+      properties:
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        status:      ref:ProjectStatus
+        visibility:  ref:Visibility
+        tags:        { type: array, items: { type: string } }
+        color:       { type: string, nullable: true }
+        budget:      { allOf: [ref:Money], nullable: true }
+
+    ProjectPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: ref:Project }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    # ===== Tasks =====
+    Task:
+      type: object
+      required: [id, projectId, title, status, priority, createdAt, updatedAt]
+      properties:
+        id:           ref:Id
+        projectId:    ref:Id
+        parentTaskId: { allOf: [ref:Id], nullable: true }
+        title:        { type: string, minLength: 1, maxLength: 200 }
+        description:  { type: string, nullable: true }
+        status:       ref:TaskStatus
+        priority:     ref:Priority
+        severity:     { allOf: [ref:Severity], nullable: true }
+        assigneeIds:  { type: array, items: ref:Id, uniqueItems: true }
+        reporterId:   { allOf: [ref:Id], nullable: true }
+        labelIds:     { type: array, items: ref:Id, uniqueItems: true }
+        dueDate:      { type: string, format: date, nullable: true }
+        startDate:    { type: string, format: date, nullable: true }
+        estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
+        actualMinutes:   { type: integer, format: int32, minimum: 0, readOnly: true }
+        progress:        { type: number, format: float, minimum: 0, maximum: 1, nullable: true }
+        location:        { allOf: [ref:GeoPoint], nullable: true }
+        customFields:
+          type: object
+          description: "Map of CustomFieldDefinition.id -> polymorphic CustomFieldValue."
+          additionalProperties: ref:CustomFieldValue
+        createdAt:   { type: string, format: date-time, readOnly: true }
+        updatedAt:   { type: string, format: date-time, readOnly: true }
+        closedAt:    { type: string, format: date-time, nullable: true, readOnly: true }
+
+    TaskCreate:
+      type: object
+      required: [title]
+      properties:
+        title:       { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, nullable: true }
+        priority:    ref:Priority
+        severity:    ref:Severity
+        assigneeIds: { type: array, items: ref:Id }
+        labelIds:    { type: array, items: ref:Id }
+        dueDate:     { type: string, format: date, nullable: true }
+        startDate:   { type: string, format: date, nullable: true }
+        estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
+        location:    ref:GeoPoint
+        parentTaskId: { allOf: [ref:Id], nullable: true }
+
+    TaskPatch:
+      type: object
+      properties:
+        title:       { type: string }
+        description: { type: string, nullable: true }
+        status:      ref:TaskStatus
+        priority:    ref:Priority
+        severity:    { allOf: [ref:Severity], nullable: true }
+        assigneeIds: { type: array, items: ref:Id }
+        labelIds:    { type: array, items: ref:Id }
+        dueDate:     { type: string, format: date, nullable: true }
+        estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
+        progress:    { type: number, format: float, minimum: 0, maximum: 1, nullable: true }
+
+    TaskCursorPage:
+      type: object
+      required: [items]
+      properties:
+        items:      { type: array, items: ref:Task }
+        nextCursor: { type: string, nullable: true }
+        prevCursor: { type: string, nullable: true }
+
+    TaskTree:
+      type: object
+      description: "Recursive node — a task with its child tasks inlined."
+      required: [task]
+      properties:
+        task:     ref:Task
+        children: { type: array, items: ref:TaskTree }
+
+    BulkTaskCreate:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: ref:TaskCreate
+        stopOnError: { type: boolean, default: false }
+
+    BulkOperationResult:
+      type: object
+      required: [requested, succeeded, failed]
+      properties:
+        requested: { type: integer, format: int32, minimum: 0 }
+        succeeded: { type: integer, format: int32, minimum: 0 }
+        failed:    { type: integer, format: int32, minimum: 0 }
+        created:   { type: array, items: ref:Task }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [index, error]
+            properties:
+              index: { type: integer, format: int32, minimum: 0 }
+              error: ref:Error
+
+    # ===== Dependencies =====
+    TaskDependency:
+      type: object
+      required: [id, sourceTaskId, targetTaskId, type, createdAt]
+      properties:
+        id:           ref:Id
+        sourceTaskId: ref:Id
+        targetTaskId: ref:Id
+        type:         ref:DependencyType
+        note:         { type: string, nullable: true, maxLength: 500 }
+        createdAt:    { type: string, format: date-time, readOnly: true }
+
+    TaskDependencyCreate:
+      type: object
+      required: [targetTaskId, type]
+      properties:
+        targetTaskId: ref:Id
+        type:         ref:DependencyType
+        note:         { type: string, nullable: true }
+
+    # ===== Time entries =====
+    TimeEntry:
+      type: object
+      required: [id, taskId, userId, durationMinutes, loggedAt]
+      properties:
+        id:              ref:Id
+        taskId:          ref:Id
+        userId:          ref:Id
+        durationMinutes: { type: integer, format: int32, minimum: 1 }
+        unit:            ref:TimeUnit
+        note:            { type: string, nullable: true, maxLength: 1000 }
+        billable:        { type: boolean, default: false }
+        loggedAt:        { type: string, format: date-time }
+
+    TimeEntryCreate:
+      type: object
+      required: [durationMinutes, loggedAt]
+      properties:
+        durationMinutes: { type: integer, format: int32, minimum: 1 }
+        unit:            ref:TimeUnit
+        note:            { type: string, nullable: true }
+        billable:        { type: boolean, default: false }
+        loggedAt:        { type: string, format: date-time }
+
+    TimeEntryPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: ref:TimeEntry }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+        totalMinutes: { type: integer, format: int64, minimum: 0 }
+
+    # ===== Labels =====
+    Label:
+      type: object
+      required: [id, projectId, name, color]
+      properties:
+        id:        ref:Id
+        projectId: ref:Id
+        name:      { type: string, minLength: 1, maxLength: 40 }
+        color:     { type: string, pattern: "^#[0-9a-fA-F]{6}$", example: "#ff6600" }
+        description: { type: string, nullable: true, maxLength: 200 }
+
+    LabelCreate:
+      type: object
+      required: [name, color]
+      properties:
+        name:        { type: string, minLength: 1, maxLength: 40 }
+        color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+        description: { type: string, nullable: true }
+
+    # ===== Custom fields =====
+    CustomFieldDefinition:
+      type: object
+      required: [id, projectId, name, type]
+      properties:
+        id:        ref:Id
+        projectId: ref:Id
+        name:      { type: string, minLength: 1, maxLength: 100 }
+        type:      ref:CustomFieldType
+        required:  { type: boolean, default: false }
+        options:   { type: array, items: { type: string }, description: "Permitted values for enum / multi_enum fields" }
+        defaultValue: { allOf: [ref:CustomFieldValue], nullable: true }
+
+    CustomFieldDefinitionCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name:     { type: string }
+        type:     ref:CustomFieldType
+        required: { type: boolean, default: false }
+        options:  { type: array, items: { type: string } }
+
+    CustomFieldValue:
+      description: "Polymorphic custom-field value tagged by `kind`."
+      oneOf:
+        - ref:StringFieldValue
+        - ref:NumberFieldValue
+        - ref:DateFieldValue
+        - ref:BooleanFieldValue
+        - ref:EnumFieldValue
+        - ref:MultiEnumFieldValue
+      discriminator:
+        propertyName: kind
+        mapping:
+          string:     ref:StringFieldValue
+          number:     ref:NumberFieldValue
+          date:       ref:DateFieldValue
+          boolean:    ref:BooleanFieldValue
+          enum:       ref:EnumFieldValue
+          multi_enum: ref:MultiEnumFieldValue
+
+    StringFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { const: string }
+        value: { type: string, maxLength: 2000 }
+
+    NumberFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { const: number }
+        value: { type: number, format: double }
+
+    DateFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { const: date }
+        value: { type: string, format: date }
+
+    BooleanFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { const: boolean }
+        value: { type: boolean }
+
+    EnumFieldValue:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:  { const: enum }
+        value: { type: string }
+
+    MultiEnumFieldValue:
+      type: object
+      required: [kind, values]
+      properties:
+        kind:   { const: multi_enum }
+        values: { type: array, items: { type: string }, uniqueItems: true }
+
+    # ===== Comments / reactions =====
+    CommentInput:
+      description: "Discriminated input for posting a comment as a human user, a bot integration, or the system itself."
+      oneOf: [ref:HumanCommentInput, ref:BotCommentInput, ref:SystemCommentInput]
+      discriminator:
+        propertyName: authorType
+        mapping:
+          human:  ref:HumanCommentInput
+          bot:    ref:BotCommentInput
+          system: ref:SystemCommentInput
+
+    CommentInputBase:
+      type: object
+      required: [authorType, body]
+      properties:
+        authorType: { type: string }
+        body:       { type: string, minLength: 1, maxLength: 5000 }
+        mentions:   { type: array, items: ref:Id, uniqueItems: true }
+
+    HumanCommentInput:
+      allOf:
+        - ref:CommentInputBase
+        - type: object
+          required: [userId]
+          properties:
+            authorType: { const: human }
+            userId:     ref:Id
+
+    BotCommentInput:
+      allOf:
+        - ref:CommentInputBase
+        - type: object
+          required: [botId, botName]
+          properties:
+            authorType: { const: bot }
+            botId:      { type: string, minLength: 1 }
+            botName:    { type: string, minLength: 1 }
+
+    SystemCommentInput:
+      allOf:
+        - ref:CommentInputBase
+        - type: object
+          required: [eventType]
+          properties:
+            authorType: { const: system }
+            eventType:  { type: string, minLength: 1 }
+
+    Comment:
+      type: object
+      required: [id, taskId, author, createdAt]
+      properties:
+        id:        ref:Id
+        taskId:    ref:Id
+        author:    ref:CommentInput
+        body:      { type: string }
+        bodyHtml:  { type: string, readOnly: true, nullable: true }
+        reactions:
+          type: object
+          description: "Map of reaction type -> count."
+          additionalProperties: { type: integer, format: int32, minimum: 0 }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        editedAt:  { type: string, format: date-time, nullable: true, readOnly: true }
+
+    CommentPatch:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 5000 }
+
+    Reaction:
+      type: object
+      required: [type, userId, createdAt]
+      properties:
+        type:      ref:ReactionType
+        userId:    ref:Id
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    ReactionCreate:
+      type: object
+      required: [type]
+      properties:
+        type: ref:ReactionType
+
+    # ===== Attachments =====
+    Attachment:
+      type: object
+      required: [id, taskId, filename, contentType, sizeBytes, url, uploadedAt]
+      properties:
+        id:          ref:Id
+        taskId:      ref:Id
+        filename:    { type: string, maxLength: 255 }
+        contentType: { type: string, example: "image/png" }
+        sizeBytes:   { type: integer, format: int64, minimum: 0 }
+        checksum:    { type: string, nullable: true, description: "Hex-encoded SHA-256" }
+        url:         { type: string, format: uri }
+        thumbnailUrl: { type: string, format: uri, nullable: true }
+        description: { type: string, nullable: true }
+        tags:        { type: array, items: { type: string } }
+        uploadedBy:  ref:Id
+        uploadedAt:  { type: string, format: date-time, readOnly: true }
+
+    AttachmentPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: ref:Attachment }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    PresignedUploadUrl:
+      type: object
+      required: [url, method, expiresAt]
+      properties:
+        url:       { type: string, format: uri }
+        method:    { type: string, enum: [PUT, POST] }
+        headers:   { type: object, additionalProperties: { type: string } }
+        fields:    { type: object, additionalProperties: { type: string } }
+        expiresAt: { type: string, format: date-time }
+
+    # ===== Notifications =====
+    Notification:
+      type: object
+      required: [id, type, message, read, createdAt]
+      properties:
+        id:        ref:Id
+        type:      ref:NotificationType
+        message:   { type: string }
+        read:      { type: boolean, default: false }
+        link:      { type: string, format: uri, nullable: true }
+        data:
+          description: "Free-form context for this notification — keys depend on `type`."
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time, readOnly: true }
+
+    NotificationPage:
+      type: object
+      required: [items, unreadCount, page, pageSize, total]
+      properties:
+        items:       { type: array, items: ref:Notification }
+        unreadCount: { type: integer, format: int32, minimum: 0 }
+        page:        { type: integer, format: int32 }
+        pageSize:    { type: integer, format: int32 }
+        total:       { type: integer, format: int64 }
+
+    # ===== Search =====
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:    { type: string, minLength: 1, maxLength: 500 }
+        entities: { type: array, items: ref:SearchEntityType, uniqueItems: true }
+        limit:    { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 }
+        filters:
+          description: "Free-form key/value filters (server interprets per-entity)."
+          type: object
+          additionalProperties: { type: string }
+
+    SearchResponse:
+      type: object
+      required: [hits, total]
+      properties:
+        hits:  { type: array, items: ref:SearchResultItem }
+        total: { type: integer, format: int64, minimum: 0 }
+
+    SearchResultItem:
+      description: "Polymorphic search hit — one of project / task / user / comment."
+      oneOf:
+        - ref:ProjectSearchHit
+        - ref:TaskSearchHit
+        - ref:UserSearchHit
+        - ref:CommentSearchHit
+      discriminator:
+        propertyName: entity
+        mapping:
+          project: ref:ProjectSearchHit
+          task:    ref:TaskSearchHit
+          user:    ref:UserSearchHit
+          comment: ref:CommentSearchHit
+
+    SearchHitBase:
+      type: object
+      required: [entity, score]
+      properties:
+        entity:    { type: string }
+        score:     { type: number, format: float, minimum: 0 }
+        highlight: { type: string, nullable: true }
+
+    ProjectSearchHit:
+      allOf:
+        - ref:SearchHitBase
+        - type: object
+          required: [project]
+          properties:
+            entity:  { const: project }
+            project: ref:Project
+
+    TaskSearchHit:
+      allOf:
+        - ref:SearchHitBase
+        - type: object
+          required: [task]
+          properties:
+            entity: { const: task }
+            task:   ref:Task
+
+    UserSearchHit:
+      allOf:
+        - ref:SearchHitBase
+        - type: object
+          required: [user]
+          properties:
+            entity: { const: user }
+            user:   ref:User
+
+    CommentSearchHit:
+      allOf:
+        - ref:SearchHitBase
+        - type: object
+          required: [comment]
+          properties:
+            entity:  { const: comment }
+            comment: ref:Comment
+
+    # ===== Reports / import =====
+    ReportRequest:
+      type: object
+      required: [kind, format]
+      properties:
+        kind:   { type: string, enum: [project_summary, task_export, time_summary, audit], description: "Which report to generate" }
+        format: ref:ReportFormat
+        projectIds: { type: array, items: ref:Id }
+        from:   { type: string, format: date, nullable: true }
+        to:     { type: string, format: date, nullable: true }
+        timezone: { type: string, default: "UTC" }
+        includeArchived: { type: boolean, default: false }
+
+    ReportJob:
+      type: object
+      required: [id, kind, format, status, requestedAt]
+      properties:
+        id:           ref:Id
+        kind:         { type: string }
+        format:       ref:ReportFormat
+        status:       ref:ReportStatus
+        progress:     { type: number, format: float, minimum: 0, maximum: 1 }
+        requestedBy:  ref:Id
+        requestedAt:  { type: string, format: date-time }
+        completedAt:  { type: string, format: date-time, nullable: true }
+        downloadUrl:  { type: string, format: uri, nullable: true }
+        sizeBytes:    { type: integer, format: int64, minimum: 0, nullable: true }
+        error:        { allOf: [ref:Error], nullable: true }
+
+    ImportJob:
+      type: object
+      required: [id, status, createdAt]
+      properties:
+        id:          ref:Id
+        status:      ref:ImportJobStatus
+        progress:    { type: number, format: float, minimum: 0, maximum: 1 }
+        total:       { type: integer, format: int32, minimum: 0 }
+        succeeded:   { type: integer, format: int32, minimum: 0 }
+        failed:      { type: integer, format: int32, minimum: 0 }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [row, error]
+            properties:
+              row:   { type: integer, format: int32, minimum: 1 }
+              error: { type: string }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+
+    # ===== Webhook subscription management =====
+    WebhookSubscription:
+      type: object
+      required: [id, url, events, active, createdAt]
+      properties:
+        id:          ref:Id
+        url:         { type: string, format: uri }
+        events:      { type: array, items: ref:WebhookEvent, uniqueItems: true, minItems: 1 }
+        active:      { type: boolean, default: true }
+        secret:      { type: string, writeOnly: true, description: "HMAC signing secret (returned only on creation)" }
+        description: { type: string, nullable: true, maxLength: 500 }
+        createdAt:   { type: string, format: date-time, readOnly: true }
+
+    WebhookSubscriptionCreate:
+      type: object
+      required: [url, events]
+      properties:
+        url:         { type: string, format: uri }
+        events:      { type: array, items: ref:WebhookEvent, uniqueItems: true, minItems: 1 }
+        description: { type: string, nullable: true }
+
+    WebhookDelivery:
+      type: object
+      required: [id, subscriptionId, event, status, attemptCount, createdAt]
+      properties:
+        id:             ref:Id
+        subscriptionId: ref:Id
+        event:          ref:WebhookEvent
+        status:         ref:WebhookDeliveryStatus
+        attemptCount:   { type: integer, format: int32, minimum: 1 }
+        responseStatus: { type: integer, format: int32, nullable: true }
+        responseBody:   { type: string, nullable: true }
+        nextRetryAt:    { type: string, format: date-time, nullable: true }
+        createdAt:      { type: string, format: date-time, readOnly: true }
+
+    # ===== Webhook event payloads (used by `webhooks:`) =====
+    TaskCreatedEvent:
+      type: object
+      required: [eventId, type, occurredAt, task]
+      properties:
+        eventId:    ref:Id
+        type:       { const: task.created }
+        occurredAt: { type: string, format: date-time }
+        task:       ref:Task
+
+    TaskStatusChangedEvent:
+      type: object
+      required: [eventId, type, occurredAt, taskId, from, to]
+      properties:
+        eventId:    ref:Id
+        type:       { const: task.status_changed }
+        occurredAt: { type: string, format: date-time }
+        taskId:     ref:Id
+        from:       ref:TaskStatus
+        to:         ref:TaskStatus
+
+    CommentCreatedEvent:
+      type: object
+      required: [eventId, type, occurredAt, comment]
+      properties:
+        eventId:    ref:Id
+        type:       { const: comment.created }
+        occurredAt: { type: string, format: date-time }
+        comment:    ref:Comment
+
+    AttachmentUploadedEvent:
+      type: object
+      required: [eventId, type, occurredAt, attachment]
+      properties:
+        eventId:    ref:Id
+        type:       { const: attachment.uploaded }
+        occurredAt: { type: string, format: date-time }
+        attachment: ref:Attachment
+
+    ProjectArchivedEvent:
+      type: object
+      required: [eventId, type, occurredAt, projectId, archivedBy]
+      properties:
+        eventId:    ref:Id
+        type:       { const: project.archived }
+        occurredAt: { type: string, format: date-time }
+        projectId:  ref:Id
+        archivedBy: ref:Id
+
+    # ===== Audit log =====
+    AuditLogEntry:
+      type: object
+      required: [id, action, actorId, occurredAt]
+      properties:
+        id:         ref:Id
+        action:     ref:AuditAction
+        actorId:    ref:Id
+        targetType: { type: string, nullable: true, example: "task" }
+        targetId:   { allOf: [ref:Id], nullable: true }
+        ipAddress:  { type: string, format: ipv4, nullable: true }
+        metadata:
+          description: "Action-specific structured context."
+          type: object
+          additionalProperties: true
+        occurredAt: { type: string, format: date-time, readOnly: true }
+
+    AuditLogPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:    { type: array, items: ref:AuditLogEntry }
+        page:     { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        total:    { type: integer, format: int64 }
+
+    # ===== System =====
+    HealthCheck:
+      type: object
+      required: [status, components, checkedAt]
+      properties:
+        status:    ref:HealthStatus
+        components:
+          description: "Map of component name -> status."
+          type: object
+          additionalProperties:
+            type: object
+            required: [status]
+            properties:
+              status:  ref:HealthStatus
+              latencyMs: { type: integer, format: int32, minimum: 0 }
+              message: { type: string, nullable: true }
+        checkedAt: { type: string, format: date-time }
+
+    ServerInfo:
+      type: object
+      required: [version, commit, builtAt]
+      properties:
+        version:   { type: string, example: "2.0.0" }
+        commit:    { type: string, pattern: "^[0-9a-f]{7,40}$" }
+        builtAt:   { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        environment: { type: string, enum: [production, staging, dev, test] }
+        rateLimits:
+          description: "Per-bucket rate limit info."
+          type: object
+          additionalProperties: ref:RateLimitInfo
+        features:
+          description: "Map of feature flag -> enabled?"
+          type: object
+          additionalProperties: { type: boolean }

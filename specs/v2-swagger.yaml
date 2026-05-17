@@ -1,0 +1,2390 @@
+# Generated from REFERENCE.yaml — do not edit directly.
+swagger: "2.0"
+info:
+  title: Task Tracker API
+  description: |
+    Reference fixture API for the ng-openapi client generator. Covers a broad
+    surface area of a SaaS task tracker: authentication, organizations, teams,
+    projects, tasks (with custom fields, dependencies, time tracking), comments
+    with polymorphic authors and reactions, file attachments, notifications,
+    search, reports/exports (binary downloads), webhooks, and audit logging.
+
+    Designed to exercise the full range of OpenAPI features: enums, nullable
+    fields, polymorphism (oneOf + discriminator), recursive types, dictionary
+    types (additionalProperties), binary uploads/downloads with multiple
+    content types, cursor pagination, RFC 7807 problem details, cookies,
+    headers, and merge-patch bodies.
+  version: 2.0.0
+  termsOfService: https://example.test/terms
+  contact:
+    name: ng-openapi test suite
+    email: test@example.com
+    url: https://example.test/ng-openapi
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+host: api.tasks.test
+basePath: /v1
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+tags:
+  - { name: auth,              description: "Authentication and session lifecycle" }
+  - { name: account,           description: "Self-service account management (/me/**)" }
+  - { name: users,             description: "User directory (admin / read-only listings)" }
+  - { name: sessions,          description: "Active login sessions" }
+  - { name: apiKeys,           description: "Personal API keys" }
+  - { name: organizations,     description: "Organizations / tenants" }
+  - { name: teams,             description: "Teams within an organization" }
+  - { name: members,           description: "Membership and invitations" }
+  - { name: projects,          description: "Projects and project membership" }
+  - { name: tasks,             description: "Tasks within projects" }
+  - { name: dependencies,      description: "Task dependencies" }
+  - { name: timeTracking,      description: "Time entries on tasks" }
+  - { name: labels,            description: "Label definitions" }
+  - { name: customFields,      description: "Custom field definitions and values" }
+  - { name: comments,          description: "Discussion on tasks" }
+  - { name: reactions,         description: "Reactions on comments" }
+  - { name: attachments,       description: "File uploads and downloads" }
+  - { name: notifications,     description: "User notification inbox" }
+  - { name: search,            description: "Cross-entity search" }
+  - { name: reports,           description: "Report generation and binary downloads" }
+  - { name: webhookSubs,       description: "Webhook subscriptions (management)" }
+  - { name: webhookDeliveries, description: "Webhook delivery log" }
+  - { name: audit,             description: "Audit log" }
+  - { name: system,            description: "Health, ping, server info" }
+
+securityDefinitions:
+  apiKey:
+    type: apiKey
+    in: header
+    name: X-API-Key
+  bearerAuth:
+    type: apiKey
+    in: header
+    name: Authorization
+    description: "JWT bearer token. Send as `Authorization: Bearer <token>`."
+  oauth2:
+    type: oauth2
+    flow: accessCode
+    authorizationUrl: https://auth.tasks.test/oauth/authorize
+    tokenUrl: https://auth.tasks.test/oauth/token
+    scopes:
+      "read:projects":  Read projects
+      "write:projects": Modify projects
+      "read:tasks":     Read tasks
+      "write:tasks":    Modify tasks
+      "read:reports":   Read reports
+      "write:webhooks": Manage webhook subscriptions
+      admin:            Administrative access
+  oauth2ClientCredentials:
+    type: oauth2
+    flow: application
+    tokenUrl: https://auth.tasks.test/oauth/token
+    scopes:
+      service: "Service-to-service"
+
+security:
+  - bearerAuth: []
+
+parameters:
+  PageParam:
+    name: page
+    in: query
+    type: integer
+    format: int32
+    default: 1
+    minimum: 1
+  PageSizeParam:
+    name: pageSize
+    in: query
+    type: integer
+    format: int32
+    default: 20
+    minimum: 1
+    maximum: 100
+  SortParam:
+    name: sort
+    in: query
+    type: string
+    description: "Sort expression e.g. '-createdAt,name'"
+  AcceptLanguage:
+    name: Accept-Language
+    in: header
+    type: string
+    required: false
+  IfMatchParam:
+    name: If-Match
+    in: header
+    type: string
+    required: false
+    description: "ETag for optimistic concurrency"
+  OrgIdParam:
+    name: orgId
+    in: path
+    required: true
+    type: string
+    format: uuid
+  TeamIdParam:
+    name: teamId
+    in: path
+    required: true
+    type: string
+    format: uuid
+  ProjectIdParam:
+    name: projectId
+    in: path
+    required: true
+    type: string
+    format: uuid
+  TaskIdParam:
+    name: taskId
+    in: path
+    required: true
+    type: string
+    format: uuid
+  CommentIdParam:
+    name: commentId
+    in: path
+    required: true
+    type: string
+    format: uuid
+  LabelIdParam:
+    name: labelId
+    in: path
+    required: true
+    type: string
+    format: uuid
+
+responses:
+  BadRequest:
+    description: Bad request
+    schema: { $ref: "#/definitions/ValidationError" }
+  Unauthorized:
+    description: Unauthorized
+    schema: { $ref: "#/definitions/Error" }
+  Forbidden:
+    description: Forbidden
+    schema: { $ref: "#/definitions/Error" }
+  NotFound:
+    description: Resource not found
+    schema: { $ref: "#/definitions/Error" }
+  Conflict:
+    description: Conflict
+    schema: { $ref: "#/definitions/Error" }
+  TooManyRequests:
+    description: Rate limit exceeded
+    headers:
+      Retry-After:
+        type: integer
+        format: int32
+        description: "Seconds until the client may retry"
+      X-RateLimit-Remaining:
+        type: integer
+        format: int32
+    schema: { $ref: "#/definitions/Error" }
+  InternalError:
+    description: Internal server error
+    schema: { $ref: "#/definitions/Error" }
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Exchange credentials for an access token
+      operationId: login
+      security: []
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/LoginRequest" }
+      responses:
+        "200":
+          description: OK
+          headers:
+            Set-Cookie: { type: string, description: "Session cookie" }
+          schema: { $ref: "#/definitions/LoginResponse" }
+        "401": { $ref: "#/responses/Unauthorized" }
+        "429": { $ref: "#/responses/TooManyRequests" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the current session
+      operationId: logout
+      responses:
+        "204": { description: Logged out }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Exchange a refresh token for a new access token
+      operationId: refreshToken
+      security: []
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/RefreshTokenRequest" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/TokenResponse" }
+        "401": { $ref: "#/responses/Unauthorized" }
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new user account
+      operationId: register
+      security: []
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/RegisterRequest" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/User" }
+        "400": { $ref: "#/responses/BadRequest" }
+        "409": { $ref: "#/responses/Conflict" }
+
+  /auth/change-password:
+    post:
+      tags: [auth]
+      summary: Change the authenticated user's password
+      operationId: changePassword
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/PasswordChangeRequest" }
+      responses:
+        "204": { description: Password changed }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /auth/2fa/setup:
+    post:
+      tags: [auth]
+      summary: Begin enrolling a TOTP authenticator (returns QR code blob)
+      operationId: setup2FA
+      produces:
+        - application/json
+        - image/png
+      responses:
+        "200":
+          description: TOTP setup payload — JSON metadata or raw PNG of the QR
+          schema: { $ref: "#/definitions/TwoFactorSetup" }
+
+  /auth/2fa/verify:
+    post:
+      tags: [auth]
+      summary: Verify a TOTP code and activate 2FA
+      operationId: verify2FA
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/TwoFactorVerifyRequest" }
+      responses:
+        "204": { description: 2FA activated }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /me:
+    get:
+      tags: [account]
+      summary: Get the currently authenticated user
+      operationId: getCurrentUser
+      parameters:
+        - { $ref: "#/parameters/AcceptLanguage" }
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag: { type: string, description: "Entity tag for optimistic concurrency" }
+          schema: { $ref: "#/definitions/User" }
+        "401": { $ref: "#/responses/Unauthorized" }
+    patch:
+      tags: [account]
+      summary: Update the authenticated user's profile
+      operationId: updateCurrentUser
+      consumes: [application/json]
+      parameters:
+        - { $ref: "#/parameters/IfMatchParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/UserPatch" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/User" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /me/avatar:
+    post:
+      tags: [account]
+      summary: Upload a new avatar image
+      operationId: uploadAvatar
+      consumes: [multipart/form-data]
+      parameters:
+        - { name: file, in: formData, required: true, type: file, description: "Image file (PNG/JPEG, max 5MB)" }
+        - { name: crop, in: formData, type: string, description: "Optional crop hint", maxLength: 64 }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/User" }
+        "413":
+          description: Payload too large
+          schema: { $ref: "#/definitions/Error" }
+    delete:
+      tags: [account]
+      summary: Remove the current avatar
+      operationId: deleteAvatar
+      responses:
+        "204": { description: Avatar removed }
+
+  /me/preferences:
+    get:
+      tags: [account]
+      summary: Get the authenticated user's preferences
+      operationId: getUserPreferences
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/UserPreferences" }
+    put:
+      tags: [account]
+      summary: Replace the authenticated user's preferences
+      operationId: updateUserPreferences
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/UserPreferences" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/UserPreferences" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /me/sessions:
+    get:
+      tags: [sessions]
+      summary: List active sessions for the current user
+      operationId: listSessions
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/Session" }
+
+  /me/sessions/{sessionId}:
+    delete:
+      tags: [sessions]
+      summary: Revoke a specific session
+      operationId: revokeSession
+      parameters:
+        - { name: sessionId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "204": { description: Revoked }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /me/api-keys:
+    get:
+      tags: [apiKeys]
+      summary: List the user's API keys (secrets redacted)
+      operationId: listApiKeys
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/ApiKey" }
+    post:
+      tags: [apiKeys]
+      summary: Create a new API key (full secret returned only here)
+      operationId: createApiKey
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/ApiKeyCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/ApiKeyCreated" }
+
+  /me/api-keys/{keyId}:
+    delete:
+      tags: [apiKeys]
+      summary: Revoke an API key
+      operationId: revokeApiKey
+      parameters:
+        - { name: keyId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "204": { description: Revoked }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /me/notifications:
+    get:
+      tags: [notifications]
+      summary: List notifications for the current user
+      operationId: listNotifications
+      parameters:
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+        - { name: unreadOnly, in: query, type: boolean, default: false }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/NotificationPage" }
+
+  /me/notifications/{notificationId}/read:
+    post:
+      tags: [notifications]
+      summary: Mark a notification as read
+      operationId: markNotificationRead
+      parameters:
+        - { name: notificationId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "204": { description: Marked }
+
+  /me/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark all notifications as read
+      operationId: markAllNotificationsRead
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required: [readCount]
+            properties:
+              readCount: { type: integer, format: int32, minimum: 0 }
+
+  /users:
+    get:
+      tags: [users]
+      summary: List users
+      operationId: listUsers
+      parameters:
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+        - { $ref: "#/parameters/SortParam" }
+        - { name: role, in: query, type: string, enum: [guest, member, admin] }
+        - { name: q,    in: query, type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Paginated list of users
+          headers:
+            X-Total-Count:
+              type: integer
+              format: int64
+              description: "Total users matching the filter"
+          schema: { $ref: "#/definitions/UserPage" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /users/{userId}:
+    get:
+      tags: [users]
+      summary: Get a user by id
+      operationId: getUser
+      parameters:
+        - { name: userId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/User" }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /organizations:
+    get:
+      tags: [organizations]
+      summary: List organizations visible to the caller
+      operationId: listOrganizations
+      parameters:
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/OrganizationPage" }
+    post:
+      tags: [organizations]
+      summary: Create a new organization
+      operationId: createOrganization
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/OrganizationCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Organization" }
+        "409": { $ref: "#/responses/Conflict" }
+
+  /organizations/{orgId}:
+    get:
+      tags: [organizations]
+      summary: Get an organization
+      operationId: getOrganization
+      parameters:
+        - { $ref: "#/parameters/OrgIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Organization" }
+        "404": { $ref: "#/responses/NotFound" }
+    patch:
+      tags: [organizations]
+      summary: Partially update an organization
+      operationId: patchOrganization
+      consumes: [application/json]
+      parameters:
+        - { $ref: "#/parameters/OrgIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/OrganizationPatch" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Organization" }
+        "404": { $ref: "#/responses/NotFound" }
+    delete:
+      tags: [organizations]
+      summary: Delete an organization
+      operationId: deleteOrganization
+      security: [{ oauth2: [admin] }]
+      parameters:
+        - { $ref: "#/parameters/OrgIdParam" }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /organizations/{orgId}/teams:
+    get:
+      tags: [teams]
+      summary: List teams in an organization
+      operationId: listTeams
+      parameters:
+        - { $ref: "#/parameters/OrgIdParam" }
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/Team" }
+    post:
+      tags: [teams]
+      summary: Create a team
+      operationId: createTeam
+      parameters:
+        - { $ref: "#/parameters/OrgIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/TeamCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Team" }
+
+  /teams/{teamId}/members:
+    get:
+      tags: [members]
+      summary: List members of a team
+      operationId: listTeamMembers
+      parameters:
+        - { $ref: "#/parameters/TeamIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/Membership" }
+
+  /teams/{teamId}/invitations:
+    post:
+      tags: [members]
+      summary: Invite a user to a team
+      operationId: inviteMember
+      parameters:
+        - { $ref: "#/parameters/TeamIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/InvitationCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Invitation" }
+        "409": { $ref: "#/responses/Conflict" }
+
+  /invitations/{invitationId}/accept:
+    post:
+      tags: [members]
+      summary: Accept an invitation
+      operationId: acceptInvitation
+      parameters:
+        - { name: invitationId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Membership" }
+        "404": { $ref: "#/responses/NotFound" }
+        "410":
+          description: Invitation expired
+          schema: { $ref: "#/definitions/Error" }
+
+  /projects:
+    get:
+      tags: [projects]
+      summary: List projects
+      operationId: listProjects
+      parameters:
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+        - { $ref: "#/parameters/SortParam" }
+        - { name: status,     in: query, type: string, enum: [planning, active, on_hold, archived] }
+        - { name: visibility, in: query, type: string, enum: [private, internal, public] }
+        - { name: tag,        in: query, type: array, items: { type: string }, collectionFormat: multi }
+        - { name: createdAfter, in: query, type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/ProjectPage" }
+    post:
+      tags: [projects]
+      summary: Create a project
+      operationId: createProject
+      security: [{ oauth2: ["write:projects"] }]
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/ProjectCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Project" }
+        "400": { $ref: "#/responses/BadRequest" }
+        "409": { $ref: "#/responses/Conflict" }
+
+  /projects/export:
+    get:
+      tags: [projects]
+      summary: Export projects as a binary download
+      operationId: exportProjects
+      produces:
+        - text/csv
+        - application/json
+        - application/zip
+        - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      parameters:
+        - { name: format, in: query, required: true, type: string, enum: [csv, json, zip, xlsx] }
+      responses:
+        "200":
+          description: Binary export
+          headers:
+            Content-Disposition: { type: string, description: 'attachment; filename="projects.csv"' }
+          schema: { type: file }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /projects/{projectId}:
+    get:
+      tags: [projects]
+      summary: Get a project
+      operationId: getProject
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Project" }
+        "404": { $ref: "#/responses/NotFound" }
+    patch:
+      tags: [projects]
+      summary: Partially update a project
+      operationId: patchProject
+      security: [{ oauth2: ["write:projects"] }]
+      consumes: [application/json]
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/ProjectPatch" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Project" }
+        "404": { $ref: "#/responses/NotFound" }
+    delete:
+      tags: [projects]
+      summary: Delete a project
+      operationId: deleteProject
+      security: [{ oauth2: [admin] }]
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /projects/{projectId}/labels:
+    get:
+      tags: [labels]
+      summary: List labels defined on a project
+      operationId: listLabels
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/Label" }
+    post:
+      tags: [labels]
+      summary: Create a label
+      operationId: createLabel
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/LabelCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Label" }
+        "409": { $ref: "#/responses/Conflict" }
+
+  /labels/{labelId}:
+    delete:
+      tags: [labels]
+      summary: Delete a label
+      operationId: deleteLabel
+      parameters:
+        - { $ref: "#/parameters/LabelIdParam" }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /projects/{projectId}/custom-fields:
+    get:
+      tags: [customFields]
+      summary: List custom field definitions on a project
+      operationId: listCustomFields
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/CustomFieldDefinition" }
+    post:
+      tags: [customFields]
+      summary: Define a new custom field on a project
+      operationId: createCustomField
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/CustomFieldDefinitionCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/CustomFieldDefinition" }
+
+  /tasks/{taskId}/custom-fields/{fieldId}:
+    put:
+      tags: [customFields]
+      summary: Set the value of a custom field on a task (polymorphic value)
+      operationId: setTaskCustomFieldValue
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - { name: fieldId, in: path, required: true, type: string, format: uuid }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/CustomFieldValue" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/CustomFieldValue" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /projects/{projectId}/tasks:
+    get:
+      tags: [tasks]
+      summary: List tasks in a project (cursor-paginated)
+      operationId: listProjectTasks
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+        - { name: cursor, in: query, type: string }
+        - { name: limit,  in: query, type: integer, format: int32, default: 25, minimum: 1, maximum: 100 }
+        - { name: status, in: query, type: array, items: { type: string, enum: [todo, in_progress, blocked, in_review, done, cancelled] }, collectionFormat: multi }
+        - { name: assignee, in: query, type: string, format: uuid }
+        - { name: priority, in: query, type: string, enum: [low, normal, high, urgent] }
+        - { name: dueBefore, in: query, type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/TaskCursorPage" }
+        "404": { $ref: "#/responses/NotFound" }
+    post:
+      tags: [tasks]
+      summary: Create a task in a project
+      operationId: createTask
+      security: [{ oauth2: ["write:tasks"] }]
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+        - { name: X-Idempotency-Key, in: header, required: true, type: string, format: uuid }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/TaskCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Task" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /projects/{projectId}/tasks/bulk:
+    post:
+      tags: [tasks]
+      summary: Create many tasks in a single request
+      operationId: bulkCreateTasks
+      security: [{ oauth2: ["write:tasks"] }]
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/BulkTaskCreate" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/BulkOperationResult" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /projects/{projectId}/tasks/import:
+    post:
+      tags: [tasks]
+      summary: Import tasks from an uploaded file (CSV/JSON/XLSX)
+      operationId: importTasks
+      consumes: [multipart/form-data]
+      parameters:
+        - { $ref: "#/parameters/ProjectIdParam" }
+        - { name: file,   in: formData, required: true, type: file, description: "Tasks file" }
+        - { name: format, in: formData, required: true, type: string, enum: [csv, json, xlsx] }
+        - { name: dryRun, in: formData, type: boolean, default: false }
+      responses:
+        "202":
+          description: Accepted
+          schema: { $ref: "#/definitions/ImportJob" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /tasks/{taskId}:
+    get:
+      tags: [tasks]
+      summary: Get a task
+      operationId: getTask
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Task" }
+        "404": { $ref: "#/responses/NotFound" }
+    patch:
+      tags: [tasks]
+      summary: Partially update a task
+      operationId: patchTask
+      security: [{ oauth2: ["write:tasks"] }]
+      consumes: [application/json]
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/TaskPatch" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Task" }
+        "404": { $ref: "#/responses/NotFound" }
+    delete:
+      tags: [tasks]
+      summary: Delete a task
+      operationId: deleteTask
+      security: [{ oauth2: [admin] }]
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /tasks/{taskId}/tree:
+    get:
+      tags: [tasks]
+      summary: Get a task and its full subtask tree (recursive)
+      operationId: getTaskTree
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/TaskTree" }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /tasks/{taskId}/assignees:
+    post:
+      tags: [tasks]
+      summary: Add an assignee to a task
+      operationId: assignTask
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required: [userId]
+            properties:
+              userId: { $ref: "#/definitions/Id" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Task" }
+
+  /tasks/{taskId}/assignees/{userId}:
+    delete:
+      tags: [tasks]
+      summary: Remove an assignee from a task
+      operationId: unassignTask
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - { name: userId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "204": { description: Removed }
+
+  /tasks/{taskId}/dependencies:
+    get:
+      tags: [dependencies]
+      summary: List dependencies declared on a task
+      operationId: listTaskDependencies
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/TaskDependency" }
+    post:
+      tags: [dependencies]
+      summary: Declare a dependency between two tasks
+      operationId: addTaskDependency
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/TaskDependencyCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/TaskDependency" }
+        "409": { $ref: "#/responses/Conflict" }
+
+  /tasks/{taskId}/time-entries:
+    get:
+      tags: [timeTracking]
+      summary: List time entries logged against a task
+      operationId: listTimeEntries
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/TimeEntryPage" }
+    post:
+      tags: [timeTracking]
+      summary: Log a time entry against a task
+      operationId: createTimeEntry
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/TimeEntryCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/TimeEntry" }
+
+  /tasks/{taskId}/comments:
+    get:
+      tags: [comments]
+      summary: List comments on a task
+      operationId: listTaskComments
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/Comment" }
+    post:
+      tags: [comments]
+      summary: Add a comment to a task (polymorphic author)
+      operationId: createTaskComment
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/CommentInput" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Comment" }
+        "400": { $ref: "#/responses/BadRequest" }
+
+  /comments/{commentId}:
+    patch:
+      tags: [comments]
+      summary: Edit an existing comment
+      operationId: patchComment
+      consumes: [application/json]
+      parameters:
+        - { $ref: "#/parameters/CommentIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/CommentPatch" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/Comment" }
+    delete:
+      tags: [comments]
+      summary: Delete a comment
+      operationId: deleteComment
+      parameters:
+        - { $ref: "#/parameters/CommentIdParam" }
+      responses:
+        "204": { description: Deleted }
+
+  /comments/{commentId}/reactions:
+    post:
+      tags: [reactions]
+      summary: React to a comment
+      operationId: addReaction
+      parameters:
+        - { $ref: "#/parameters/CommentIdParam" }
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/ReactionCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Reaction" }
+
+  /comments/{commentId}/reactions/{reactionType}:
+    delete:
+      tags: [reactions]
+      summary: Remove a reaction from a comment
+      operationId: removeReaction
+      parameters:
+        - { $ref: "#/parameters/CommentIdParam" }
+        - { name: reactionType, in: path, required: true, type: string, enum: ["+1", "-1", laugh, hooray, confused, heart, rocket, eyes] }
+      responses:
+        "204": { description: Removed }
+
+  /tasks/{taskId}/attachments:
+    get:
+      tags: [attachments]
+      summary: List attachments on a task
+      operationId: listAttachments
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/AttachmentPage" }
+    post:
+      tags: [attachments]
+      summary: Upload an attachment to a task
+      operationId: uploadAttachment
+      consumes: [multipart/form-data]
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - { name: file,        in: formData, required: true, type: file, description: "Binary file" }
+        - { name: description, in: formData, type: string, maxLength: 500 }
+        - { name: tags,        in: formData, type: array, items: { type: string }, collectionFormat: multi }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/Attachment" }
+        "413":
+          description: Payload too large
+          schema: { $ref: "#/definitions/Error" }
+
+  /tasks/{taskId}/attachments/{attachmentId}:
+    get:
+      tags: [attachments]
+      summary: Download an attachment's binary content
+      operationId: downloadAttachment
+      produces:
+        - application/octet-stream
+        - image/png
+        - image/jpeg
+        - application/pdf
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - { name: attachmentId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "200":
+          description: Binary attachment
+          headers:
+            Content-Disposition: { type: string, description: "attachment; filename=..." }
+            ETag:                { type: string }
+          schema: { type: file }
+        "404": { $ref: "#/responses/NotFound" }
+    delete:
+      tags: [attachments]
+      summary: Delete an attachment
+      operationId: deleteAttachment
+      parameters:
+        - { $ref: "#/parameters/TaskIdParam" }
+        - { name: attachmentId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "204": { description: Deleted }
+
+  /attachments/presigned-upload:
+    post:
+      tags: [attachments]
+      summary: Get a presigned URL for direct upload to object storage
+      operationId: createPresignedUpload
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required: [filename, contentType]
+            properties:
+              filename:    { type: string, maxLength: 255 }
+              contentType: { type: string }
+              sizeBytes:   { type: integer, format: int64, minimum: 0 }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/PresignedUploadUrl" }
+
+  /search:
+    post:
+      tags: [search]
+      summary: Cross-entity search (returns polymorphic hits)
+      operationId: search
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/SearchRequest" }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/SearchResponse" }
+
+  /reports:
+    post:
+      tags: [reports]
+      summary: Request asynchronous report generation
+      operationId: requestReport
+      security: [{ oauth2: ["read:reports"] }]
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/ReportRequest" }
+      responses:
+        "202":
+          description: Accepted — generation started
+          headers:
+            Location: { type: string, format: uri, description: "URL of the report job" }
+          schema: { $ref: "#/definitions/ReportJob" }
+
+  /reports/{reportId}:
+    get:
+      tags: [reports]
+      summary: Get the metadata of a report job
+      operationId: getReport
+      parameters:
+        - { name: reportId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/ReportJob" }
+        "404": { $ref: "#/responses/NotFound" }
+
+  /reports/{reportId}/download:
+    get:
+      tags: [reports]
+      summary: Download the rendered report (binary blob in many formats)
+      operationId: downloadReport
+      produces:
+        - application/pdf
+        - text/csv
+        - application/json
+        - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      parameters:
+        - { name: reportId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "200":
+          description: Binary report
+          headers:
+            Content-Disposition: { type: string }
+          schema: { type: file }
+        "404": { $ref: "#/responses/NotFound" }
+        "409":
+          description: Report not ready yet
+          schema: { $ref: "#/definitions/Error" }
+
+  /webhook-subscriptions:
+    get:
+      tags: [webhookSubs]
+      summary: List webhook subscriptions
+      operationId: listWebhookSubscriptions
+      security: [{ oauth2: ["write:webhooks"] }]
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/WebhookSubscription" }
+    post:
+      tags: [webhookSubs]
+      summary: Create a webhook subscription
+      operationId: createWebhookSubscription
+      security: [{ oauth2: ["write:webhooks"] }]
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema: { $ref: "#/definitions/WebhookSubscriptionCreate" }
+      responses:
+        "201":
+          description: Created
+          schema: { $ref: "#/definitions/WebhookSubscription" }
+
+  /webhook-subscriptions/{subId}:
+    delete:
+      tags: [webhookSubs]
+      summary: Delete a webhook subscription
+      operationId: deleteWebhookSubscription
+      security: [{ oauth2: ["write:webhooks"] }]
+      parameters:
+        - { name: subId, in: path, required: true, type: string, format: uuid }
+      responses:
+        "204": { description: Deleted }
+
+  /webhook-subscriptions/{subId}/deliveries:
+    get:
+      tags: [webhookDeliveries]
+      summary: List delivery attempts for a webhook subscription
+      operationId: listWebhookDeliveries
+      parameters:
+        - { name: subId, in: path, required: true, type: string, format: uuid }
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+        - { name: status, in: query, type: string, enum: [pending, success, failed, retrying] }
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: array
+            items: { $ref: "#/definitions/WebhookDelivery" }
+
+  /audit-log:
+    get:
+      tags: [audit]
+      summary: List audit log entries
+      operationId: listAuditLog
+      security: [{ oauth2: [admin] }]
+      parameters:
+        - { $ref: "#/parameters/PageParam" }
+        - { $ref: "#/parameters/PageSizeParam" }
+        - { name: action,  in: query, type: string, enum: [user.login, user.logout, project.created, project.deleted, task.created, task.deleted, api_key.created, api_key.revoked, webhook.created] }
+        - { name: actorId, in: query, type: string, format: uuid }
+        - { name: from,    in: query, type: string, format: date-time }
+        - { name: to,      in: query, type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/AuditLogPage" }
+
+  /ping:
+    get:
+      tags: [system]
+      summary: Liveness check (plain text)
+      operationId: ping
+      security: []
+      produces: [text/plain]
+      responses:
+        "200":
+          description: OK
+          schema: { type: string }
+
+  /health:
+    get:
+      tags: [system]
+      summary: Aggregated component health
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/HealthCheck" }
+        "503":
+          description: Degraded
+          schema: { $ref: "#/definitions/HealthCheck" }
+
+  /server-info:
+    get:
+      tags: [system]
+      summary: Build / version info for the running server
+      operationId: serverInfo
+      security: []
+      responses:
+        "200":
+          description: OK
+          schema: { $ref: "#/definitions/ServerInfo" }
+
+# -----------------------------------------------------------------------------
+# Definitions (Swagger 2.0 schemas)
+# -----------------------------------------------------------------------------
+definitions:
+
+  # ===== Primitives =====
+  Id:   { type: string, format: uuid }
+  Slug: { type: string, pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$", maxLength: 64 }
+
+  # ===== Enums =====
+  Role:                  { type: string, enum: [guest, member, admin], description: "Top-level platform role." }
+  MembershipRole:        { type: string, enum: [owner, admin, maintainer, contributor, viewer], description: "Per-team/per-project role." }
+  ProjectStatus:         { type: string, enum: [planning, active, on_hold, archived] }
+  Visibility:            { type: string, enum: [private, internal, public] }
+  TaskStatus:            { type: string, enum: [todo, in_progress, blocked, in_review, done, cancelled] }
+  Priority:              { type: string, enum: [low, normal, high, urgent], default: normal }
+  Severity:              { type: string, enum: [info, low, medium, high, critical] }
+  NotificationChannel:   { type: string, enum: [email, push, sms, webhook, in_app] }
+  NotificationType:
+    type: string
+    enum: [task.assigned, task.status_changed, task.commented, comment.mentioned, project.invited, report.ready]
+  Locale:                { type: string, enum: [en-US, en-GB, fr-FR, de-DE, es-ES, ja-JP, pt-BR, zh-CN] }
+  Currency:              { type: string, enum: [USD, EUR, GBP, JPY, CAD, AUD, BRL] }
+  DayOfWeek:             { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
+  TimeUnit:              { type: string, enum: [minutes, hours, days, weeks] }
+  DependencyType:        { type: string, enum: [blocks, is_blocked_by, relates_to, duplicates, duplicated_by] }
+  ReactionType:          { type: string, enum: ["+1", "-1", laugh, hooray, confused, heart, rocket, eyes] }
+  WebhookEvent:
+    type: string
+    enum: [task.created, task.updated, task.status_changed, task.deleted, comment.created, attachment.uploaded, project.archived]
+  WebhookDeliveryStatus: { type: string, enum: [pending, success, failed, retrying] }
+  ReportFormat:          { type: string, enum: [pdf, csv, json, xlsx] }
+  ExportFormat:          { type: string, enum: [csv, json, zip, xlsx] }
+  ReportStatus:          { type: string, enum: [queued, running, succeeded, failed, cancelled] }
+  ImportJobStatus:       { type: string, enum: [pending, running, succeeded, partial, failed] }
+  AuditAction:
+    type: string
+    enum: [user.login, user.logout, project.created, project.deleted, task.created, task.deleted, api_key.created, api_key.revoked, webhook.created]
+  ApiKeyScope:           { type: string, enum: [read, write, admin] }
+  SearchEntityType:      { type: string, enum: [project, task, user, comment] }
+  InvitationStatus:      { type: string, enum: [pending, accepted, declined, expired, revoked] }
+  HealthStatus:          { type: string, enum: [up, degraded, down] }
+  CustomFieldType:       { type: string, enum: [string, number, date, boolean, enum, multi_enum] }
+
+  # ===== Generic value objects =====
+  GeoPoint:
+    type: array
+    description: "Tuple of [longitude, latitude]. (Degraded from prefixItems for Swagger 2.0.)"
+    items: { type: number }
+    minItems: 2
+    maxItems: 2
+
+  Money:
+    type: object
+    required: [amount, currency]
+    properties:
+      amount:   { type: number, format: double, description: "Decimal amount (use string in strict-decimal clients)" }
+      currency: { $ref: "#/definitions/Currency" }
+
+  Address:
+    type: object
+    required: [country]
+    properties:
+      line1:      { type: string, maxLength: 200 }
+      line2:      { type: string, maxLength: 200 }
+      city:       { type: string, maxLength: 100 }
+      region:     { type: string, maxLength: 100 }
+      postalCode: { type: string, maxLength: 20 }
+      country:    { type: string, minLength: 2, maxLength: 2, description: "ISO 3166-1 alpha-2 country code" }
+
+  RateLimitInfo:
+    type: object
+    required: [limit, remaining, resetAt]
+    properties:
+      limit:     { type: integer, format: int32, minimum: 0 }
+      remaining: { type: integer, format: int32, minimum: 0 }
+      resetAt:   { type: string, format: date-time }
+
+  # ===== Errors =====
+  Error:
+    type: object
+    required: [code, message]
+    properties:
+      code:    { type: string, description: "Stable machine-readable error code" }
+      message: { type: string }
+      traceId: { type: string }
+      details:
+        type: object
+        description: "Free-form error context — map of arbitrary primitive values."
+        additionalProperties: { type: string }
+
+  ValidationError:
+    allOf:
+      - { $ref: "#/definitions/Error" }
+      - type: object
+        required: [fields]
+        properties:
+          fields:
+            type: array
+            items:
+              type: object
+              required: [path, issue]
+              properties:
+                path:  { type: string, description: "JSON pointer to the offending field" }
+                issue: { type: string }
+                value: { type: string, description: "Submitted value (best-effort, stringified)" }
+
+  # ===== Users / account =====
+  User:
+    type: object
+    required: [id, email, name, role, status, createdAt]
+    properties:
+      id:        { $ref: "#/definitions/Id" }
+      email:     { type: string, format: email }
+      name:      { type: string, minLength: 1, maxLength: 200 }
+      role:      { $ref: "#/definitions/Role" }
+      status:    { type: string, enum: [active, suspended, invited], default: active }
+      avatarUrl: { type: string, format: uri }
+      bio:       { type: string, maxLength: 500 }
+      locale:    { $ref: "#/definitions/Locale" }
+      timezone:  { type: string, example: "America/New_York" }
+      phone:     { type: string, example: "+1-555-0123" }
+      address:   { $ref: "#/definitions/Address" }
+      twoFactorEnabled: { type: boolean, default: false }
+      labels:    { type: object, additionalProperties: { type: string }, description: "Free-form key/value labels on the user (map type)." }
+      createdAt: { type: string, format: date-time, readOnly: true }
+      updatedAt: { type: string, format: date-time, readOnly: true }
+      lastLoginAt: { type: string, format: date-time, readOnly: true }
+
+  UserPatch:
+    type: object
+    properties:
+      name:     { type: string }
+      bio:      { type: string }
+      locale:   { $ref: "#/definitions/Locale" }
+      timezone: { type: string }
+      phone:    { type: string }
+      address:  { $ref: "#/definitions/Address" }
+
+  UserPage:
+    type: object
+    required: [items, page, pageSize, total]
+    properties:
+      items:    { type: array, items: { $ref: "#/definitions/User" } }
+      page:     { type: integer, format: int32 }
+      pageSize: { type: integer, format: int32 }
+      total:    { type: integer, format: int64 }
+
+  UserPreferences:
+    type: object
+    required: [locale, timezone, theme]
+    properties:
+      locale:    { $ref: "#/definitions/Locale" }
+      timezone:  { type: string, example: "Europe/Berlin" }
+      theme:     { type: string, enum: [light, dark, system], default: system }
+      weekStart: { $ref: "#/definitions/DayOfWeek" }
+      notifications:
+        type: object
+        description: "Map of NotificationType -> array of channels enabled for that type."
+        additionalProperties:
+          type: array
+          items: { $ref: "#/definitions/NotificationChannel" }
+      digestFrequency: { type: string, enum: [never, daily, weekly], default: weekly }
+
+  Session:
+    type: object
+    required: [id, createdAt, ipAddress, userAgent, current]
+    properties:
+      id:          { $ref: "#/definitions/Id" }
+      createdAt:   { type: string, format: date-time }
+      expiresAt:   { type: string, format: date-time }
+      ipAddress:   { type: string, format: ipv4 }
+      ipAddressV6: { type: string, format: ipv6 }
+      userAgent:   { type: string, maxLength: 500 }
+      location:    { $ref: "#/definitions/GeoPoint" }
+      current:     { type: boolean }
+
+  # ===== Auth payloads =====
+  LoginRequest:
+    type: object
+    required: [email, password]
+    properties:
+      email:    { type: string, format: email }
+      password: { type: string, format: password, minLength: 8 }
+      totp:     { type: string, pattern: "^[0-9]{6}$" }
+
+  LoginResponse:
+    type: object
+    required: [accessToken, tokenType, expiresIn, user]
+    properties:
+      accessToken:  { type: string }
+      refreshToken: { type: string }
+      tokenType:    { type: string, enum: [Bearer] }
+      expiresIn:    { type: integer, format: int32, description: "Lifetime in seconds" }
+      user:         { $ref: "#/definitions/User" }
+
+  RefreshTokenRequest:
+    type: object
+    required: [refreshToken]
+    properties:
+      refreshToken: { type: string }
+
+  TokenResponse:
+    type: object
+    required: [accessToken, tokenType, expiresIn]
+    properties:
+      accessToken:  { type: string }
+      refreshToken: { type: string }
+      tokenType:    { type: string, enum: [Bearer] }
+      expiresIn:    { type: integer, format: int32 }
+
+  RegisterRequest:
+    type: object
+    required: [email, password, name]
+    properties:
+      email:       { type: string, format: email }
+      password:    { type: string, format: password, minLength: 8, maxLength: 128 }
+      name:        { type: string, minLength: 1, maxLength: 200 }
+      locale:      { $ref: "#/definitions/Locale" }
+      inviteToken: { type: string }
+
+  PasswordResetRequest:
+    type: object
+    required: [email]
+    properties:
+      email: { type: string, format: email }
+
+  PasswordChangeRequest:
+    type: object
+    required: [currentPassword, newPassword]
+    properties:
+      currentPassword: { type: string, format: password }
+      newPassword:     { type: string, format: password, minLength: 8 }
+
+  TwoFactorSetup:
+    type: object
+    required: [secret, otpAuthUrl, qrPng]
+    properties:
+      secret:        { type: string, description: "Base32 TOTP secret" }
+      otpAuthUrl:    { type: string, format: uri }
+      qrPng:         { type: string, format: byte, description: "Base64-encoded PNG of the QR code" }
+      recoveryCodes:
+        type: array
+        items: { type: string }
+        minItems: 8
+        maxItems: 16
+
+  TwoFactorVerifyRequest:
+    type: object
+    required: [code]
+    properties:
+      code: { type: string, pattern: "^[0-9]{6}$" }
+
+  # ===== API keys =====
+  ApiKey:
+    type: object
+    required: [id, name, prefix, scopes, createdAt]
+    properties:
+      id:         { $ref: "#/definitions/Id" }
+      name:       { type: string, minLength: 1, maxLength: 100 }
+      prefix:     { type: string, description: "First 8 characters of the secret (full secret never returned again)" }
+      scopes:     { type: array, items: { $ref: "#/definitions/ApiKeyScope" }, uniqueItems: true }
+      expiresAt:  { type: string, format: date-time }
+      lastUsedAt: { type: string, format: date-time, readOnly: true }
+      createdAt:  { type: string, format: date-time, readOnly: true }
+
+  ApiKeyCreate:
+    type: object
+    required: [name, scopes]
+    properties:
+      name:      { type: string, minLength: 1, maxLength: 100 }
+      scopes:    { type: array, items: { $ref: "#/definitions/ApiKeyScope" }, minItems: 1 }
+      expiresAt: { type: string, format: date-time }
+
+  ApiKeyCreated:
+    allOf:
+      - { $ref: "#/definitions/ApiKey" }
+      - type: object
+        required: [secret]
+        properties:
+          secret: { type: string, description: "Full secret — shown only on creation" }
+
+  # ===== Organizations =====
+  Organization:
+    type: object
+    required: [id, name, slug, createdAt]
+    properties:
+      id:           { $ref: "#/definitions/Id" }
+      name:         { type: string, minLength: 1, maxLength: 200 }
+      slug:         { $ref: "#/definitions/Slug" }
+      description:  { type: string, maxLength: 5000 }
+      billingEmail: { type: string, format: email }
+      address:      { $ref: "#/definitions/Address" }
+      plan:         { type: string, enum: [free, team, business, enterprise], default: free }
+      seatsUsed:    { type: integer, format: int32, minimum: 0 }
+      seatsTotal:   { type: integer, format: int32, minimum: 0 }
+      createdAt:    { type: string, format: date-time, readOnly: true }
+
+  OrganizationCreate:
+    type: object
+    required: [name, slug]
+    properties:
+      name:         { type: string }
+      slug:         { $ref: "#/definitions/Slug" }
+      description:  { type: string }
+      billingEmail: { type: string, format: email }
+
+  OrganizationPatch:
+    type: object
+    properties:
+      name:         { type: string }
+      description:  { type: string }
+      billingEmail: { type: string, format: email }
+      address:      { $ref: "#/definitions/Address" }
+
+  OrganizationPage:
+    type: object
+    required: [items, page, pageSize, total]
+    properties:
+      items:    { type: array, items: { $ref: "#/definitions/Organization" } }
+      page:     { type: integer, format: int32 }
+      pageSize: { type: integer, format: int32 }
+      total:    { type: integer, format: int64 }
+
+  # ===== Teams =====
+  Team:
+    type: object
+    required: [id, orgId, name, createdAt]
+    properties:
+      id:          { $ref: "#/definitions/Id" }
+      orgId:       { $ref: "#/definitions/Id" }
+      name:        { type: string, minLength: 1, maxLength: 200 }
+      slug:        { $ref: "#/definitions/Slug" }
+      description: { type: string }
+      memberCount: { type: integer, format: int32, minimum: 0, readOnly: true }
+      createdAt:   { type: string, format: date-time, readOnly: true }
+
+  TeamCreate:
+    type: object
+    required: [name, slug]
+    properties:
+      name:        { type: string }
+      slug:        { $ref: "#/definitions/Slug" }
+      description: { type: string }
+
+  Membership:
+    type: object
+    required: [userId, teamId, role, joinedAt]
+    properties:
+      userId:   { $ref: "#/definitions/Id" }
+      teamId:   { $ref: "#/definitions/Id" }
+      role:     { $ref: "#/definitions/MembershipRole" }
+      joinedAt: { type: string, format: date-time, readOnly: true }
+      user:     { $ref: "#/definitions/User" }
+
+  Invitation:
+    type: object
+    required: [id, email, teamId, role, status, createdAt]
+    properties:
+      id:        { $ref: "#/definitions/Id" }
+      email:     { type: string, format: email }
+      teamId:    { $ref: "#/definitions/Id" }
+      role:      { $ref: "#/definitions/MembershipRole" }
+      status:    { $ref: "#/definitions/InvitationStatus" }
+      token:     { type: string, description: "Acceptance token (never returned after creation)" }
+      invitedBy: { $ref: "#/definitions/Id" }
+      expiresAt: { type: string, format: date-time }
+      createdAt: { type: string, format: date-time, readOnly: true }
+
+  InvitationCreate:
+    type: object
+    required: [email, role]
+    properties:
+      email: { type: string, format: email }
+      role:  { $ref: "#/definitions/MembershipRole" }
+
+  # ===== Projects =====
+  Project:
+    type: object
+    required: [id, orgId, name, slug, status, visibility, ownerId, createdAt, updatedAt]
+    properties:
+      id:          { $ref: "#/definitions/Id" }
+      orgId:       { $ref: "#/definitions/Id" }
+      name:        { type: string, minLength: 1, maxLength: 200 }
+      slug:        { $ref: "#/definitions/Slug" }
+      description: { type: string, maxLength: 5000 }
+      status:      { $ref: "#/definitions/ProjectStatus" }
+      visibility:  { $ref: "#/definitions/Visibility" }
+      ownerId:     { $ref: "#/definitions/Id" }
+      memberIds:   { type: array, items: { $ref: "#/definitions/Id" }, uniqueItems: true }
+      tags:        { type: array, items: { type: string, maxLength: 40 }, uniqueItems: true }
+      color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", example: "#3366ff" }
+      budget:      { $ref: "#/definitions/Money" }
+      startDate:   { type: string, format: date }
+      endDate:     { type: string, format: date }
+      progress:    { type: number, format: float, minimum: 0, maximum: 1, readOnly: true }
+      taskCount:   { type: integer, format: int32, minimum: 0, readOnly: true }
+      createdAt:   { type: string, format: date-time, readOnly: true }
+      updatedAt:   { type: string, format: date-time, readOnly: true }
+      archivedAt:  { type: string, format: date-time, readOnly: true }
+
+  ProjectCreate:
+    type: object
+    required: [name]
+    properties:
+      name:        { type: string, minLength: 1, maxLength: 200 }
+      slug:        { $ref: "#/definitions/Slug" }
+      description: { type: string }
+      visibility:  { $ref: "#/definitions/Visibility" }
+      memberIds:   { type: array, items: { $ref: "#/definitions/Id" } }
+      tags:        { type: array, items: { type: string } }
+      color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+      budget:      { $ref: "#/definitions/Money" }
+      startDate:   { type: string, format: date }
+      endDate:     { type: string, format: date }
+
+  ProjectPatch:
+    type: object
+    properties:
+      name:        { type: string }
+      description: { type: string }
+      status:      { $ref: "#/definitions/ProjectStatus" }
+      visibility:  { $ref: "#/definitions/Visibility" }
+      tags:        { type: array, items: { type: string } }
+      color:       { type: string }
+      budget:      { $ref: "#/definitions/Money" }
+
+  ProjectPage:
+    type: object
+    required: [items, page, pageSize, total]
+    properties:
+      items:    { type: array, items: { $ref: "#/definitions/Project" } }
+      page:     { type: integer, format: int32 }
+      pageSize: { type: integer, format: int32 }
+      total:    { type: integer, format: int64 }
+
+  # ===== Tasks =====
+  Task:
+    type: object
+    required: [id, projectId, title, status, priority, createdAt, updatedAt]
+    properties:
+      id:              { $ref: "#/definitions/Id" }
+      projectId:       { $ref: "#/definitions/Id" }
+      parentTaskId:    { $ref: "#/definitions/Id" }
+      title:           { type: string, minLength: 1, maxLength: 200 }
+      description:     { type: string }
+      status:          { $ref: "#/definitions/TaskStatus" }
+      priority:        { $ref: "#/definitions/Priority" }
+      severity:        { $ref: "#/definitions/Severity" }
+      assigneeIds:     { type: array, items: { $ref: "#/definitions/Id" }, uniqueItems: true }
+      reporterId:      { $ref: "#/definitions/Id" }
+      labelIds:        { type: array, items: { $ref: "#/definitions/Id" }, uniqueItems: true }
+      dueDate:         { type: string, format: date }
+      startDate:       { type: string, format: date }
+      estimateMinutes: { type: integer, format: int32, minimum: 0 }
+      actualMinutes:   { type: integer, format: int32, minimum: 0, readOnly: true }
+      progress:        { type: number, format: float, minimum: 0, maximum: 1 }
+      location:        { $ref: "#/definitions/GeoPoint" }
+      customFields:
+        type: object
+        description: "Map of CustomFieldDefinition.id -> polymorphic CustomFieldValue."
+        additionalProperties: { $ref: "#/definitions/CustomFieldValue" }
+      createdAt: { type: string, format: date-time, readOnly: true }
+      updatedAt: { type: string, format: date-time, readOnly: true }
+      closedAt:  { type: string, format: date-time, readOnly: true }
+
+  TaskCreate:
+    type: object
+    required: [title]
+    properties:
+      title:           { type: string, minLength: 1, maxLength: 200 }
+      description:     { type: string }
+      priority:        { $ref: "#/definitions/Priority" }
+      severity:        { $ref: "#/definitions/Severity" }
+      assigneeIds:     { type: array, items: { $ref: "#/definitions/Id" } }
+      labelIds:        { type: array, items: { $ref: "#/definitions/Id" } }
+      dueDate:         { type: string, format: date }
+      startDate:       { type: string, format: date }
+      estimateMinutes: { type: integer, format: int32, minimum: 0 }
+      location:        { $ref: "#/definitions/GeoPoint" }
+      parentTaskId:    { $ref: "#/definitions/Id" }
+
+  TaskPatch:
+    type: object
+    properties:
+      title:           { type: string }
+      description:     { type: string }
+      status:          { $ref: "#/definitions/TaskStatus" }
+      priority:        { $ref: "#/definitions/Priority" }
+      severity:        { $ref: "#/definitions/Severity" }
+      assigneeIds:     { type: array, items: { $ref: "#/definitions/Id" } }
+      labelIds:        { type: array, items: { $ref: "#/definitions/Id" } }
+      dueDate:         { type: string, format: date }
+      estimateMinutes: { type: integer, format: int32, minimum: 0 }
+      progress:        { type: number, format: float, minimum: 0, maximum: 1 }
+
+  TaskCursorPage:
+    type: object
+    required: [items]
+    properties:
+      items:      { type: array, items: { $ref: "#/definitions/Task" } }
+      nextCursor: { type: string }
+      prevCursor: { type: string }
+
+  TaskTree:
+    type: object
+    description: "Recursive node — a task with its child tasks inlined."
+    required: [task]
+    properties:
+      task:     { $ref: "#/definitions/Task" }
+      children: { type: array, items: { $ref: "#/definitions/TaskTree" } }
+
+  BulkTaskCreate:
+    type: object
+    required: [tasks]
+    properties:
+      tasks:
+        type: array
+        minItems: 1
+        maxItems: 500
+        items: { $ref: "#/definitions/TaskCreate" }
+      stopOnError: { type: boolean, default: false }
+
+  BulkOperationResult:
+    type: object
+    required: [requested, succeeded, failed]
+    properties:
+      requested: { type: integer, format: int32, minimum: 0 }
+      succeeded: { type: integer, format: int32, minimum: 0 }
+      failed:    { type: integer, format: int32, minimum: 0 }
+      created:   { type: array, items: { $ref: "#/definitions/Task" } }
+      errors:
+        type: array
+        items:
+          type: object
+          required: [index, error]
+          properties:
+            index: { type: integer, format: int32, minimum: 0 }
+            error: { $ref: "#/definitions/Error" }
+
+  # ===== Dependencies =====
+  TaskDependency:
+    type: object
+    required: [id, sourceTaskId, targetTaskId, type, createdAt]
+    properties:
+      id:           { $ref: "#/definitions/Id" }
+      sourceTaskId: { $ref: "#/definitions/Id" }
+      targetTaskId: { $ref: "#/definitions/Id" }
+      type:         { $ref: "#/definitions/DependencyType" }
+      note:         { type: string, maxLength: 500 }
+      createdAt:    { type: string, format: date-time, readOnly: true }
+
+  TaskDependencyCreate:
+    type: object
+    required: [targetTaskId, type]
+    properties:
+      targetTaskId: { $ref: "#/definitions/Id" }
+      type:         { $ref: "#/definitions/DependencyType" }
+      note:         { type: string }
+
+  # ===== Time entries =====
+  TimeEntry:
+    type: object
+    required: [id, taskId, userId, durationMinutes, loggedAt]
+    properties:
+      id:              { $ref: "#/definitions/Id" }
+      taskId:          { $ref: "#/definitions/Id" }
+      userId:          { $ref: "#/definitions/Id" }
+      durationMinutes: { type: integer, format: int32, minimum: 1 }
+      unit:            { $ref: "#/definitions/TimeUnit" }
+      note:            { type: string, maxLength: 1000 }
+      billable:        { type: boolean, default: false }
+      loggedAt:        { type: string, format: date-time }
+
+  TimeEntryCreate:
+    type: object
+    required: [durationMinutes, loggedAt]
+    properties:
+      durationMinutes: { type: integer, format: int32, minimum: 1 }
+      unit:            { $ref: "#/definitions/TimeUnit" }
+      note:            { type: string }
+      billable:        { type: boolean, default: false }
+      loggedAt:        { type: string, format: date-time }
+
+  TimeEntryPage:
+    type: object
+    required: [items, page, pageSize, total]
+    properties:
+      items:        { type: array, items: { $ref: "#/definitions/TimeEntry" } }
+      page:         { type: integer, format: int32 }
+      pageSize:     { type: integer, format: int32 }
+      total:        { type: integer, format: int64 }
+      totalMinutes: { type: integer, format: int64, minimum: 0 }
+
+  # ===== Labels =====
+  Label:
+    type: object
+    required: [id, projectId, name, color]
+    properties:
+      id:          { $ref: "#/definitions/Id" }
+      projectId:   { $ref: "#/definitions/Id" }
+      name:        { type: string, minLength: 1, maxLength: 40 }
+      color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", example: "#ff6600" }
+      description: { type: string, maxLength: 200 }
+
+  LabelCreate:
+    type: object
+    required: [name, color]
+    properties:
+      name:        { type: string, minLength: 1, maxLength: 40 }
+      color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+      description: { type: string }
+
+  # ===== Custom fields =====
+  CustomFieldDefinition:
+    type: object
+    required: [id, projectId, name, type]
+    properties:
+      id:           { $ref: "#/definitions/Id" }
+      projectId:    { $ref: "#/definitions/Id" }
+      name:         { type: string, minLength: 1, maxLength: 100 }
+      type:         { $ref: "#/definitions/CustomFieldType" }
+      required:     { type: boolean, default: false }
+      options:      { type: array, items: { type: string }, description: "Permitted values for enum / multi_enum fields" }
+      defaultValue: { $ref: "#/definitions/CustomFieldValue" }
+
+  CustomFieldDefinitionCreate:
+    type: object
+    required: [name, type]
+    properties:
+      name:     { type: string }
+      type:     { $ref: "#/definitions/CustomFieldType" }
+      required: { type: boolean, default: false }
+      options:  { type: array, items: { type: string } }
+
+  # Flattened polymorphic union (Swagger 2.0 has no `oneOf`).
+  # Discriminator `kind` selects which optional fields are required:
+  #   string     -> value (string)
+  #   number     -> value (number)
+  #   date       -> value (date string)
+  #   boolean    -> value (boolean)
+  #   enum       -> value (string)
+  #   multi_enum -> values (array of strings)
+  CustomFieldValue:
+    type: object
+    required: [kind]
+    discriminator: kind
+    properties:
+      kind:   { type: string, enum: [string, number, date, boolean, enum, multi_enum] }
+      value:  { type: string, description: "Holds the value for string / enum kinds, or stringified value for number / date / boolean. Clients must coerce based on `kind`." }
+      values: { type: array, items: { type: string }, description: "Used when kind=multi_enum." }
+
+  # ===== Comments / reactions =====
+  # Flattened polymorphic comment input (Swagger 2.0 has no `oneOf`).
+  # Discriminator `authorType` selects which optional fields are required:
+  #   human  -> userId required
+  #   bot    -> botId, botName required
+  #   system -> eventType required
+  CommentInput:
+    type: object
+    required: [authorType, body]
+    discriminator: authorType
+    properties:
+      authorType: { type: string, enum: [human, bot, system] }
+      body:       { type: string, minLength: 1, maxLength: 5000 }
+      mentions:   { type: array, items: { $ref: "#/definitions/Id" }, uniqueItems: true }
+      userId:     { $ref: "#/definitions/Id" }
+      botId:      { type: string, minLength: 1 }
+      botName:    { type: string, minLength: 1 }
+      eventType:  { type: string, minLength: 1 }
+
+  Comment:
+    type: object
+    required: [id, taskId, author, createdAt]
+    properties:
+      id:       { $ref: "#/definitions/Id" }
+      taskId:   { $ref: "#/definitions/Id" }
+      author:   { $ref: "#/definitions/CommentInput" }
+      body:     { type: string }
+      bodyHtml: { type: string, readOnly: true }
+      reactions:
+        type: object
+        description: "Map of reaction type -> count."
+        additionalProperties: { type: integer, format: int32, minimum: 0 }
+      createdAt: { type: string, format: date-time, readOnly: true }
+      editedAt:  { type: string, format: date-time, readOnly: true }
+
+  CommentPatch:
+    type: object
+    required: [body]
+    properties:
+      body: { type: string, minLength: 1, maxLength: 5000 }
+
+  Reaction:
+    type: object
+    required: [type, userId, createdAt]
+    properties:
+      type:      { $ref: "#/definitions/ReactionType" }
+      userId:    { $ref: "#/definitions/Id" }
+      createdAt: { type: string, format: date-time, readOnly: true }
+
+  ReactionCreate:
+    type: object
+    required: [type]
+    properties:
+      type: { $ref: "#/definitions/ReactionType" }
+
+  # ===== Attachments =====
+  Attachment:
+    type: object
+    required: [id, taskId, filename, contentType, sizeBytes, url, uploadedAt]
+    properties:
+      id:           { $ref: "#/definitions/Id" }
+      taskId:       { $ref: "#/definitions/Id" }
+      filename:     { type: string, maxLength: 255 }
+      contentType:  { type: string, example: "image/png" }
+      sizeBytes:    { type: integer, format: int64, minimum: 0 }
+      checksum:     { type: string, description: "Hex-encoded SHA-256" }
+      url:          { type: string, format: uri }
+      thumbnailUrl: { type: string, format: uri }
+      description:  { type: string }
+      tags:         { type: array, items: { type: string } }
+      uploadedBy:   { $ref: "#/definitions/Id" }
+      uploadedAt:   { type: string, format: date-time, readOnly: true }
+
+  AttachmentPage:
+    type: object
+    required: [items, page, pageSize, total]
+    properties:
+      items:    { type: array, items: { $ref: "#/definitions/Attachment" } }
+      page:     { type: integer, format: int32 }
+      pageSize: { type: integer, format: int32 }
+      total:    { type: integer, format: int64 }
+
+  PresignedUploadUrl:
+    type: object
+    required: [url, method, expiresAt]
+    properties:
+      url:       { type: string, format: uri }
+      method:    { type: string, enum: [PUT, POST] }
+      headers:   { type: object, additionalProperties: { type: string } }
+      fields:    { type: object, additionalProperties: { type: string } }
+      expiresAt: { type: string, format: date-time }
+
+  # ===== Notifications =====
+  Notification:
+    type: object
+    required: [id, type, message, read, createdAt]
+    properties:
+      id:        { $ref: "#/definitions/Id" }
+      type:      { $ref: "#/definitions/NotificationType" }
+      message:   { type: string }
+      read:      { type: boolean, default: false }
+      link:      { type: string, format: uri }
+      data:
+        type: object
+        description: "Free-form context for this notification — keys depend on `type`."
+        additionalProperties: { type: string }
+      createdAt: { type: string, format: date-time, readOnly: true }
+
+  NotificationPage:
+    type: object
+    required: [items, unreadCount, page, pageSize, total]
+    properties:
+      items:       { type: array, items: { $ref: "#/definitions/Notification" } }
+      unreadCount: { type: integer, format: int32, minimum: 0 }
+      page:        { type: integer, format: int32 }
+      pageSize:    { type: integer, format: int32 }
+      total:       { type: integer, format: int64 }
+
+  # ===== Search =====
+  SearchRequest:
+    type: object
+    required: [query]
+    properties:
+      query:    { type: string, minLength: 1, maxLength: 500 }
+      entities: { type: array, items: { $ref: "#/definitions/SearchEntityType" }, uniqueItems: true }
+      limit:    { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 }
+      filters:
+        type: object
+        description: "Free-form key/value filters (server interprets per-entity)."
+        additionalProperties: { type: string }
+
+  SearchResponse:
+    type: object
+    required: [hits, total]
+    properties:
+      hits:  { type: array, items: { $ref: "#/definitions/SearchResultItem" } }
+      total: { type: integer, format: int64, minimum: 0 }
+
+  # Flattened polymorphic search hit (Swagger 2.0 has no `oneOf`).
+  # Discriminator `entity` selects which optional field carries the hit:
+  #   project -> project
+  #   task    -> task
+  #   user    -> user
+  #   comment -> comment
+  SearchResultItem:
+    type: object
+    required: [entity, score]
+    discriminator: entity
+    properties:
+      entity:    { type: string, enum: [project, task, user, comment] }
+      score:     { type: number, format: float, minimum: 0 }
+      highlight: { type: string }
+      project:   { $ref: "#/definitions/Project" }
+      task:      { $ref: "#/definitions/Task" }
+      user:      { $ref: "#/definitions/User" }
+      comment:   { $ref: "#/definitions/Comment" }
+
+  # ===== Reports / import =====
+  ReportRequest:
+    type: object
+    required: [kind, format]
+    properties:
+      kind:            { type: string, enum: [project_summary, task_export, time_summary, audit], description: "Which report to generate" }
+      format:          { $ref: "#/definitions/ReportFormat" }
+      projectIds:      { type: array, items: { $ref: "#/definitions/Id" } }
+      from:            { type: string, format: date }
+      to:              { type: string, format: date }
+      timezone:        { type: string, default: "UTC" }
+      includeArchived: { type: boolean, default: false }
+
+  ReportJob:
+    type: object
+    required: [id, kind, format, status, requestedAt]
+    properties:
+      id:          { $ref: "#/definitions/Id" }
+      kind:        { type: string }
+      format:      { $ref: "#/definitions/ReportFormat" }
+      status:      { $ref: "#/definitions/ReportStatus" }
+      progress:    { type: number, format: float, minimum: 0, maximum: 1 }
+      requestedBy: { $ref: "#/definitions/Id" }
+      requestedAt: { type: string, format: date-time }
+      completedAt: { type: string, format: date-time }
+      downloadUrl: { type: string, format: uri }
+      sizeBytes:   { type: integer, format: int64, minimum: 0 }
+      error:       { $ref: "#/definitions/Error" }
+
+  ImportJob:
+    type: object
+    required: [id, status, createdAt]
+    properties:
+      id:        { $ref: "#/definitions/Id" }
+      status:    { $ref: "#/definitions/ImportJobStatus" }
+      progress:  { type: number, format: float, minimum: 0, maximum: 1 }
+      total:     { type: integer, format: int32, minimum: 0 }
+      succeeded: { type: integer, format: int32, minimum: 0 }
+      failed:    { type: integer, format: int32, minimum: 0 }
+      errors:
+        type: array
+        items:
+          type: object
+          required: [row, error]
+          properties:
+            row:   { type: integer, format: int32, minimum: 1 }
+            error: { type: string }
+      createdAt:   { type: string, format: date-time, readOnly: true }
+      completedAt: { type: string, format: date-time }
+
+  # ===== Webhook subscriptions =====
+  WebhookSubscription:
+    type: object
+    required: [id, url, events, active, createdAt]
+    properties:
+      id:          { $ref: "#/definitions/Id" }
+      url:         { type: string, format: uri }
+      events:      { type: array, items: { $ref: "#/definitions/WebhookEvent" }, uniqueItems: true, minItems: 1 }
+      active:      { type: boolean, default: true }
+      secret:      { type: string, description: "HMAC signing secret (returned only on creation)" }
+      description: { type: string, maxLength: 500 }
+      createdAt:   { type: string, format: date-time, readOnly: true }
+
+  WebhookSubscriptionCreate:
+    type: object
+    required: [url, events]
+    properties:
+      url:         { type: string, format: uri }
+      events:      { type: array, items: { $ref: "#/definitions/WebhookEvent" }, uniqueItems: true, minItems: 1 }
+      description: { type: string }
+
+  WebhookDelivery:
+    type: object
+    required: [id, subscriptionId, event, status, attemptCount, createdAt]
+    properties:
+      id:             { $ref: "#/definitions/Id" }
+      subscriptionId: { $ref: "#/definitions/Id" }
+      event:          { $ref: "#/definitions/WebhookEvent" }
+      status:         { $ref: "#/definitions/WebhookDeliveryStatus" }
+      attemptCount:   { type: integer, format: int32, minimum: 1 }
+      responseStatus: { type: integer, format: int32 }
+      responseBody:   { type: string }
+      nextRetryAt:    { type: string, format: date-time }
+      createdAt:      { type: string, format: date-time, readOnly: true }
+
+  # ===== Webhook event payloads (no `webhooks:` section in 2.0; kept for parity) =====
+  TaskCreatedEvent:
+    type: object
+    required: [eventId, type, occurredAt, task]
+    properties:
+      eventId:    { $ref: "#/definitions/Id" }
+      type:       { type: string, enum: [task.created] }
+      occurredAt: { type: string, format: date-time }
+      task:       { $ref: "#/definitions/Task" }
+
+  TaskStatusChangedEvent:
+    type: object
+    required: [eventId, type, occurredAt, taskId, from, to]
+    properties:
+      eventId:    { $ref: "#/definitions/Id" }
+      type:       { type: string, enum: [task.status_changed] }
+      occurredAt: { type: string, format: date-time }
+      taskId:     { $ref: "#/definitions/Id" }
+      from:       { $ref: "#/definitions/TaskStatus" }
+      to:         { $ref: "#/definitions/TaskStatus" }
+
+  CommentCreatedEvent:
+    type: object
+    required: [eventId, type, occurredAt, comment]
+    properties:
+      eventId:    { $ref: "#/definitions/Id" }
+      type:       { type: string, enum: [comment.created] }
+      occurredAt: { type: string, format: date-time }
+      comment:    { $ref: "#/definitions/Comment" }
+
+  AttachmentUploadedEvent:
+    type: object
+    required: [eventId, type, occurredAt, attachment]
+    properties:
+      eventId:    { $ref: "#/definitions/Id" }
+      type:       { type: string, enum: [attachment.uploaded] }
+      occurredAt: { type: string, format: date-time }
+      attachment: { $ref: "#/definitions/Attachment" }
+
+  ProjectArchivedEvent:
+    type: object
+    required: [eventId, type, occurredAt, projectId, archivedBy]
+    properties:
+      eventId:    { $ref: "#/definitions/Id" }
+      type:       { type: string, enum: [project.archived] }
+      occurredAt: { type: string, format: date-time }
+      projectId:  { $ref: "#/definitions/Id" }
+      archivedBy: { $ref: "#/definitions/Id" }
+
+  # ===== Audit log =====
+  AuditLogEntry:
+    type: object
+    required: [id, action, actorId, occurredAt]
+    properties:
+      id:         { $ref: "#/definitions/Id" }
+      action:     { $ref: "#/definitions/AuditAction" }
+      actorId:    { $ref: "#/definitions/Id" }
+      targetType: { type: string, example: "task" }
+      targetId:   { $ref: "#/definitions/Id" }
+      ipAddress:  { type: string, format: ipv4 }
+      metadata:
+        type: object
+        description: "Action-specific structured context."
+        additionalProperties: { type: string }
+      occurredAt: { type: string, format: date-time, readOnly: true }
+
+  AuditLogPage:
+    type: object
+    required: [items, page, pageSize, total]
+    properties:
+      items:    { type: array, items: { $ref: "#/definitions/AuditLogEntry" } }
+      page:     { type: integer, format: int32 }
+      pageSize: { type: integer, format: int32 }
+      total:    { type: integer, format: int64 }
+
+  # ===== System =====
+  HealthCheck:
+    type: object
+    required: [status, components, checkedAt]
+    properties:
+      status: { $ref: "#/definitions/HealthStatus" }
+      components:
+        type: object
+        description: "Map of component name -> status."
+        additionalProperties:
+          type: object
+          required: [status]
+          properties:
+            status:    { $ref: "#/definitions/HealthStatus" }
+            latencyMs: { type: integer, format: int32, minimum: 0 }
+            message:   { type: string }
+      checkedAt: { type: string, format: date-time }
+
+  ServerInfo:
+    type: object
+    required: [version, commit, builtAt]
+    properties:
+      version:     { type: string, example: "2.0.0" }
+      commit:      { type: string, pattern: "^[0-9a-f]{7,40}$" }
+      builtAt:     { type: string, format: date-time }
+      startedAt:   { type: string, format: date-time }
+      environment: { type: string, enum: [production, staging, dev, test] }
+      rateLimits:
+        type: object
+        description: "Per-bucket rate limit info."
+        additionalProperties: { $ref: "#/definitions/RateLimitInfo" }
+      features:
+        type: object
+        description: "Map of feature flag -> enabled?"
+        additionalProperties: { type: boolean }
