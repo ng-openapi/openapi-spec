@@ -33,7 +33,7 @@ rendering_rules:
 
   nullable:
     swagger-2.0:   "Drop nullability — emit only the base type. May emit `x-nullable: true` if explicit."
-    openapi-3.0.3: "Emit `nullable: true` alongside `type:`."
+    openapi-3.0.3: "Always pair `nullable: true` with a sibling `type:` — Redocly's `nullable-type-sibling` rule fails otherwise. For nullable $refs use `{ type: <T>, allOf: [{ $ref: ... }], nullable: true }` where `<T>` matches the referenced schema's base type (object / string / array / etc)."
     openapi-3.1.0: "Emit `type: [<base>, \"null\"]` (no `nullable` keyword)."
 
   file_upload:
@@ -65,7 +65,7 @@ rendering_rules:
     openapi-3.1.0: "Emit `prefixItems: [...]` with `items: false`."
 
   multi_content_response:
-    swagger-2.0:   "Emit `produces:` with all listed media types at the operation level; response schema is the JSON one only — binary types degrade to `type: file`."
+    swagger-2.0:   "Emit `produces:` with all listed media types at the operation level. Response `schema:` describes the body shape — for binary responses use `{ type: string, format: binary }` (NEVER `type: file`, which is parameter-only in Swagger 2.0 and is rejected by Redocly/Spectral on response schemas)."
     openapi-3.x:   "Emit one entry per media type under `response.content`."
 
   servers_vs_host:
@@ -86,6 +86,10 @@ rendering_rules:
 
   additional_properties_map:
     all:           "Emit `additionalProperties: <schema>` for dictionaries / maps."
+
+  license_object:
+    pre-3.1:       "Emit `license: { name, url }` — `identifier` is not supported."
+    openapi-3.1.0: "Emit `license: { name, identifier }` only — drop `url`. `identifier` and `url` are mutually exclusive in 3.1 (spec rejects both)."
 
 
 # -----------------------------------------------------------------------------

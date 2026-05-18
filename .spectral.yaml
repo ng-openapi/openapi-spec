@@ -1,0 +1,6 @@
+extends: ["spectral:oas"]
+rules:
+  # Spectral's array-items rule does not recognize JSON Schema 2020-12's
+  # `items: false` (used in OpenAPI 3.1 to close prefixItems tuples).
+  # Disable to allow valid 3.1 tuple schemas like GeoPoint.
+  array-items: off

@@ -1372,7 +1372,7 @@ components:
                 properties:
                   path:  { type: string, description: "JSON pointer to the offending field" }
                   issue: { type: string }
-                  value: { description: "Submitted value (best-effort)", nullable: true }
+                  value: { description: "Submitted value (best-effort, any JSON value including null)" }
 
     # ===== Users / account =====
     User:
@@ -1386,10 +1386,10 @@ components:
         status:    { type: string, enum: [active, suspended, invited], default: active }
         avatarUrl: { type: string, format: uri, nullable: true }
         bio:       { type: string, maxLength: 500, nullable: true }
-        locale:    { allOf: [{ $ref: "#/components/schemas/Locale" }], nullable: true }
+        locale:    { type: string, allOf: [{ $ref: "#/components/schemas/Locale" }], nullable: true }
         timezone:  { type: string, nullable: true, example: "America/New_York" }
         phone:     { type: string, nullable: true, example: "+1-555-0123" }
-        address:   { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+        address:   { type: object, allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
         twoFactorEnabled: { type: boolean, default: false }
         labels:    { type: object, additionalProperties: { type: string }, description: "Free-form key/value labels on the user (map type)." }
         createdAt: { type: string, format: date-time, readOnly: true }
@@ -1404,7 +1404,7 @@ components:
         locale:   { $ref: "#/components/schemas/Locale" }
         timezone: { type: string, nullable: true }
         phone:    { type: string, nullable: true }
-        address:  { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+        address:  { type: object, allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
 
     UserPage:
       type: object
@@ -1441,7 +1441,7 @@ components:
         ipAddress:   { type: string, format: ipv4 }
         ipAddressV6: { type: string, format: ipv6, nullable: true }
         userAgent:   { type: string, maxLength: 500 }
-        location:    { allOf: [{ $ref: "#/components/schemas/GeoPoint" }], nullable: true }
+        location:    { type: array, items: { type: number }, minItems: 2, maxItems: 2, description: "Tuple of [longitude, latitude].", nullable: true }
         current:     { type: boolean }
 
     # ===== Auth payloads =====
@@ -1559,7 +1559,7 @@ components:
         slug:         { $ref: "#/components/schemas/Slug" }
         description:  { type: string, maxLength: 5000, nullable: true }
         billingEmail: { type: string, format: email, nullable: true }
-        address:      { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+        address:      { type: object, allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
         plan:         { type: string, enum: [free, team, business, enterprise], default: free }
         seatsUsed:    { type: integer, format: int32, minimum: 0 }
         seatsTotal:   { type: integer, format: int32, minimum: 0 }
@@ -1580,7 +1580,7 @@ components:
         name:         { type: string }
         description:  { type: string, nullable: true }
         billingEmail: { type: string, format: email, nullable: true }
-        address:      { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+        address:      { type: object, allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
 
     OrganizationPage:
       type: object
@@ -1620,7 +1620,7 @@ components:
         teamId:   { $ref: "#/components/schemas/Id" }
         role:     { $ref: "#/components/schemas/MembershipRole" }
         joinedAt: { type: string, format: date-time, readOnly: true }
-        user:     { allOf: [{ $ref: "#/components/schemas/User" }], nullable: true, description: "Optionally inlined when expanded" }
+        user:     { type: object, allOf: [{ $ref: "#/components/schemas/User" }], nullable: true, description: "Optionally inlined when expanded" }
 
     Invitation:
       type: object
@@ -1659,7 +1659,7 @@ components:
         memberIds:   { type: array, items: { $ref: "#/components/schemas/Id" }, uniqueItems: true }
         tags:        { type: array, items: { type: string, maxLength: 40 }, uniqueItems: true }
         color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", nullable: true, example: "#3366ff" }
-        budget:      { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        budget:      { type: object, allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
         startDate:   { type: string, format: date, nullable: true }
         endDate:     { type: string, format: date, nullable: true }
         progress:    { type: number, format: float, minimum: 0, maximum: 1, readOnly: true }
@@ -1679,7 +1679,7 @@ components:
         memberIds:   { type: array, items: { $ref: "#/components/schemas/Id" } }
         tags:        { type: array, items: { type: string } }
         color:       { type: string, pattern: "^#[0-9a-fA-F]{6}$", nullable: true }
-        budget:      { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        budget:      { type: object, allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
         startDate:   { type: string, format: date, nullable: true }
         endDate:     { type: string, format: date, nullable: true }
 
@@ -1692,7 +1692,7 @@ components:
         visibility:  { $ref: "#/components/schemas/Visibility" }
         tags:        { type: array, items: { type: string } }
         color:       { type: string, nullable: true }
-        budget:      { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        budget:      { type: object, allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
 
     ProjectPage:
       type: object
@@ -1710,21 +1710,21 @@ components:
       properties:
         id:              { $ref: "#/components/schemas/Id" }
         projectId:       { $ref: "#/components/schemas/Id" }
-        parentTaskId:    { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+        parentTaskId:    { type: string, allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
         title:           { type: string, minLength: 1, maxLength: 200 }
         description:     { type: string, nullable: true }
         status:          { $ref: "#/components/schemas/TaskStatus" }
         priority:        { $ref: "#/components/schemas/Priority" }
-        severity:        { allOf: [{ $ref: "#/components/schemas/Severity" }], nullable: true }
+        severity:        { type: string, allOf: [{ $ref: "#/components/schemas/Severity" }], nullable: true }
         assigneeIds:     { type: array, items: { $ref: "#/components/schemas/Id" }, uniqueItems: true }
-        reporterId:      { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+        reporterId:      { type: string, allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
         labelIds:        { type: array, items: { $ref: "#/components/schemas/Id" }, uniqueItems: true }
         dueDate:         { type: string, format: date, nullable: true }
         startDate:       { type: string, format: date, nullable: true }
         estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
         actualMinutes:   { type: integer, format: int32, minimum: 0, readOnly: true }
         progress:        { type: number, format: float, minimum: 0, maximum: 1, nullable: true }
-        location:        { allOf: [{ $ref: "#/components/schemas/GeoPoint" }], nullable: true }
+        location:        { type: array, items: { type: number }, minItems: 2, maxItems: 2, description: "Tuple of [longitude, latitude].", nullable: true }
         customFields:
           type: object
           description: "Map of CustomFieldDefinition.id -> polymorphic CustomFieldValue."
@@ -1747,7 +1747,7 @@ components:
         startDate:       { type: string, format: date, nullable: true }
         estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
         location:        { $ref: "#/components/schemas/GeoPoint" }
-        parentTaskId:    { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+        parentTaskId:    { type: string, allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
 
     TaskPatch:
       type: object
@@ -1756,7 +1756,7 @@ components:
         description:     { type: string, nullable: true }
         status:          { $ref: "#/components/schemas/TaskStatus" }
         priority:        { $ref: "#/components/schemas/Priority" }
-        severity:        { allOf: [{ $ref: "#/components/schemas/Severity" }], nullable: true }
+        severity:        { type: string, allOf: [{ $ref: "#/components/schemas/Severity" }], nullable: true }
         assigneeIds:     { type: array, items: { $ref: "#/components/schemas/Id" } }
         labelIds:        { type: array, items: { $ref: "#/components/schemas/Id" } }
         dueDate:         { type: string, format: date, nullable: true }
@@ -1891,7 +1891,7 @@ components:
         type:         { $ref: "#/components/schemas/CustomFieldType" }
         required:     { type: boolean, default: false }
         options:      { type: array, items: { type: string }, description: "Permitted values for enum / multi_enum fields" }
-        defaultValue: { allOf: [{ $ref: "#/components/schemas/CustomFieldValue" }], nullable: true }
+        defaultValue: { type: object, allOf: [{ $ref: "#/components/schemas/CustomFieldValue" }], nullable: true }
 
     CustomFieldDefinitionCreate:
       type: object
@@ -2218,7 +2218,7 @@ components:
         completedAt: { type: string, format: date-time, nullable: true }
         downloadUrl: { type: string, format: uri, nullable: true }
         sizeBytes:   { type: integer, format: int64, minimum: 0, nullable: true }
-        error:       { allOf: [{ $ref: "#/components/schemas/Error" }], nullable: true }
+        error:       { type: object, allOf: [{ $ref: "#/components/schemas/Error" }], nullable: true }
 
     ImportJob:
       type: object
@@ -2334,7 +2334,7 @@ components:
         action:     { $ref: "#/components/schemas/AuditAction" }
         actorId:    { $ref: "#/components/schemas/Id" }
         targetType: { type: string, nullable: true, example: "task" }
-        targetId:   { allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
+        targetId:   { type: string, allOf: [{ $ref: "#/components/schemas/Id" }], nullable: true }
         ipAddress:  { type: string, format: ipv4, nullable: true }
         metadata:
           type: object

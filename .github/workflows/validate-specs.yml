@@ -36,4 +36,4 @@ jobs:
         run: npx --yes @redocly/cli@latest lint "${{ matrix.spec }}" --format=stylish
 
       - name: Spectral lint (oas ruleset)
-        run: npx --yes @stoplight/spectral-cli@latest lint "${{ matrix.spec }}" --ruleset=spectral:oas --fail-severity=error
+        run: npx --yes @stoplight/spectral-cli@latest lint "${{ matrix.spec }}" --ruleset .spectral.yaml --fail-severity=error

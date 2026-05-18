@@ -702,7 +702,7 @@ paths:
           description: Binary export
           headers:
             Content-Disposition: { type: string, description: 'attachment; filename="projects.csv"' }
-          schema: { type: file }
+          schema: { type: string, format: binary }
         "400": { $ref: "#/responses/BadRequest" }
 
   /projects/{projectId}:
@@ -1172,7 +1172,7 @@ paths:
           headers:
             Content-Disposition: { type: string, description: "attachment; filename=..." }
             ETag:                { type: string }
-          schema: { type: file }
+          schema: { type: string, format: binary }
         "404": { $ref: "#/responses/NotFound" }
     delete:
       tags: [attachments]
@@ -1268,7 +1268,7 @@ paths:
           description: Binary report
           headers:
             Content-Disposition: { type: string }
-          schema: { type: file }
+          schema: { type: string, format: binary }
         "404": { $ref: "#/responses/NotFound" }
         "409":
           description: Report not ready yet
