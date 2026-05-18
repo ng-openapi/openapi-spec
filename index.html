@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task Tracker API — OpenAPI fixture suite</title>
+  <meta name="description" content="Hand-crafted OpenAPI/Swagger fixture specs (2.0, 3.0, 3.1) for the ng-openapi Angular client generator." />
+  <link rel="preconnect" href="https://cdn.redoc.ly" />
+  <style>
+    :root {
+      --bg: #0f1115;
+      --surface: #161a22;
+      --surface-2: #1e2330;
+      --border: #2a3142;
+      --text: #e6e8ee;
+      --muted: #9aa3b2;
+      --accent: #7aa2ff;
+      --accent-2: #56d3a3;
+      --accent-3: #f0a868;
+      --code-bg: #0b0d12;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #fafbfc;
+        --surface: #ffffff;
+        --surface-2: #f3f5f9;
+        --border: #e3e7ee;
+        --text: #1a1f2b;
+        --muted: #586172;
+        --accent: #3a6df0;
+        --accent-2: #1f9d6a;
+        --accent-3: #c6692a;
+        --code-bg: #f3f5f9;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.9em;
+    }
+    .container { max-width: 1080px; margin: 0 auto; padding: 48px 24px; }
+    header.hero {
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+    }
+    .hero-inner { max-width: 1080px; margin: 0 auto; padding: 64px 24px 56px; }
+    .eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: clamp(28px, 4vw, 40px);
+      margin: 0 0 16px;
+      line-height: 1.15;
+    }
+    .lede {
+      font-size: 18px;
+      color: var(--muted);
+      max-width: 720px;
+      margin: 0 0 24px;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 24px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .hero-meta a { color: var(--accent); }
+
+    section { margin-top: 48px; }
+    h2 {
+      font-size: 20px;
+      margin: 0 0 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .card h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--muted);
+    }
+    .badge.v2 { color: var(--accent-3); border-color: color-mix(in srgb, var(--accent-3) 40%, var(--border)); }
+    .badge.v30 { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+    .badge.v31 { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 40%, var(--border)); }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; }
+    .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn:hover { border-color: var(--accent); text-decoration: none; }
+    .btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .btn.primary:hover { filter: brightness(1.05); }
+
+    .viewer-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .viewer-toolbar .spacer { flex: 1; }
+    .viewer-toolbar .label { color: var(--muted); font-size: 13px; margin-right: 4px; }
+    .viewer-frame {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      min-height: 600px;
+    }
+    .viewer-frame iframe {
+      display: block;
+      width: 100%;
+      height: 80vh;
+      border: 0;
+    }
+
+    .workflow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+    .workflow ol { padding-left: 20px; margin: 8px 0 0; }
+    .workflow li { margin: 6px 0; color: var(--muted); }
+    .workflow li strong { color: var(--text); }
+
+    footer {
+      margin-top: 64px;
+      padding: 24px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <span class="eyebrow">OpenAPI fixture suite</span>
+      <h1>Task Tracker API</h1>
+      <p class="lede">
+        A single hand-crafted API rendered into three OpenAPI versions — Swagger 2.0, OpenAPI 3.0,
+        and OpenAPI 3.1 — used as the reference test surface for the
+        <a href="https://github.com/ng-openapi/ng-openapi">ng-openapi</a> Angular client generator.
+      </p>
+      <div class="hero-meta">
+        <span>Source: <a href="https://github.com/ng-openapi/openapi-spec">ng-openapi/openapi-spec</a></span>
+        <span>License: MIT</span>
+        <span>Validated with Redocly + Spectral</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section>
+      <h2>Spec files</h2>
+      <div class="cards">
+        <article class="card">
+          <h3><span class="badge v2">Swagger 2.0</span> v2-swagger.yaml</h3>
+          <p>Legacy Swagger 2.0 rendering. Uses <code>definitions</code>, <code>consumes</code>/<code>produces</code>, and form parameters.</p>
+          <div class="card-actions">
+            <button class="btn primary" data-spec="specs/v2-swagger.yaml" data-label="Swagger 2.0">View docs</button>
+            <a class="btn" href="specs/v2-swagger.yaml">Raw YAML</a>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><span class="badge v30">OpenAPI 3.0</span> v3.0-openapi.yaml</h3>
+          <p>OpenAPI 3.0.3 rendering. Uses <code>components</code>, <code>nullable: true</code>, and <code>requestBody</code>.</p>
+          <div class="card-actions">
+            <button class="btn primary" data-spec="specs/v3.0-openapi.yaml" data-label="OpenAPI 3.0">View docs</button>
+            <a class="btn" href="specs/v3.0-openapi.yaml">Raw YAML</a>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><span class="badge v31">OpenAPI 3.1</span> v3.1-openapi.yaml</h3>
+          <p>OpenAPI 3.1.0 rendering. JSON Schema 2020-12, <code>type: [..., "null"]</code>, <code>const</code>, <code>prefixItems</code>, webhooks.</p>
+          <div class="card-actions">
+            <button class="btn primary" data-spec="specs/v3.1-openapi.yaml" data-label="OpenAPI 3.1">View docs</button>
+            <a class="btn" href="specs/v3.1-openapi.yaml">Raw YAML</a>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="viewer">
+      <h2>Interactive documentation</h2>
+      <div class="viewer-toolbar">
+        <span class="label">Viewing:</span>
+        <strong id="viewer-current">OpenAPI 3.1</strong>
+        <span class="spacer"></span>
+        <a id="viewer-raw" class="btn" href="specs/v3.1-openapi.yaml">Open raw YAML</a>
+      </div>
+      <div class="viewer-frame">
+        <iframe
+          id="redoc-frame"
+          title="API documentation"
+          loading="lazy"
+          src="about:blank"></iframe>
+      </div>
+    </section>
+
+    <section>
+      <h2>How these files are produced</h2>
+      <div class="workflow">
+        <p style="margin:0">
+          <code>REFERENCE.yaml</code> at the repo root is the single source of truth. It defines
+          one API plus per-version rendering rules; the three files under <code>specs/</code> are
+          generated from it.
+        </p>
+        <ol>
+          <li><strong>Edit</strong> <code>REFERENCE.yaml</code> to add or change endpoints, schemas, security, etc.</li>
+          <li><strong>Regenerate</strong> by asking Claude: <em>"regenerate specs from REFERENCE.yaml"</em>.</li>
+          <li><strong>Validate</strong> — CI runs Redocly and Spectral against all three rendered specs.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Generated fixtures for <a href="https://github.com/ng-openapi/ng-openapi">ng-openapi</a> ·
+    <a href="https://github.com/ng-openapi/openapi-spec">View on GitHub</a>
+  </footer>
+
+  <script>
+    // Build a Redoc viewer page on the fly inside the iframe so we don't need
+    // to ship separate HTML files per spec.
+    function redocSrcDoc(specUrl) {
+      // The iframe needs an absolute URL because it lives at about:blank.
+      const absolute = new URL(specUrl, window.location.href).href;
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Redoc</title>
+<style>html,body{margin:0;padding:0;height:100%;}</style>
+</head><body>
+<redoc spec-url="${absolute}"></redoc>
+<script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"><\/script>
+</body></html>`;
+    }
+
+    const frame = document.getElementById('redoc-frame');
+    const currentLabel = document.getElementById('viewer-current');
+    const rawLink = document.getElementById('viewer-raw');
+
+    function loadSpec(specUrl, label) {
+      frame.srcdoc = redocSrcDoc(specUrl);
+      currentLabel.textContent = label;
+      rawLink.href = specUrl;
+    }
+
+    document.querySelectorAll('button[data-spec]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        loadSpec(btn.dataset.spec, btn.dataset.label);
+        document.getElementById('viewer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    // Default: load v3.1 on page load.
+    loadSpec('specs/v3.1-openapi.yaml', 'OpenAPI 3.1');
+  </script>
+</body>
+</html>
