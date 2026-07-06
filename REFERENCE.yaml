@@ -24,6 +24,12 @@
 #   prefixItems:       -> rendered per rendering_rules.prefix_items
 #   webhooks:          -> rendered only in 3.1 targets
 #   additionalProperties: ref:X   -> map / dictionary value type
+#   body.form_urlencoded  -> rendered per rendering_rules.form_urlencoded_body
+#   callbacks:         -> rendered per rendering_rules.callbacks (3.x only)
+#   links: (on a response) -> rendered per rendering_rules.links (3.x only)
+#   style: deepObject / pipeDelimited -> rendered per the matching param rule
+#   exclusiveMinimum: N   -> rendered per rendering_rules.exclusive_bounds
+#   deprecated: true   -> rendered per rendering_rules.deprecated_keyword
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -78,7 +84,8 @@ rendering_rules:
     openapi-3.1.0: "May emit `examples: [..]` array on schemas (JSON Schema 2020-12)."
 
   byte_format:
-    all:           "`type: string, format: byte` — base64-encoded binary payload."
+    pre-3.1:       "`type: string, format: byte` — base64-encoded binary payload."
+    openapi-3.1.0: "`type: string, contentEncoding: base64` (JSON Schema 2020-12) — no `format: byte`."
 
   binary_format:
     swagger-2.0:   "Inside `produces` / `consumes`: `type: file`. Inside response/request bodies use `type: string, format: binary`."
@@ -90,6 +97,47 @@ rendering_rules:
   license_object:
     pre-3.1:       "Emit `license: { name, url }` — `identifier` is not supported."
     openapi-3.1.0: "Emit `license: { name, identifier }` only — drop `url`. `identifier` and `url` are mutually exclusive in 3.1 (spec rejects both)."
+
+  untagged_union:
+    swagger-2.0:   "No oneOf — emit an empty schema `{}` (any) with a description listing the allowed primitive types."
+    openapi-3.x:   "Emit `oneOf: [...]` without a discriminator."
+
+  any_of:
+    swagger-2.0:   "No anyOf — emit the loosest single schema that admits all variants, described in prose."
+    openapi-3.x:   "Emit `anyOf: [...]`."
+
+  exclusive_bounds:
+    swagger-2.0:   "Boolean form — `minimum: N` with sibling `exclusiveMinimum: true` (same for maximum)."
+    openapi-3.0.3: "Boolean form — identical to Swagger 2.0."
+    openapi-3.1.0: "Numeric form — `exclusiveMinimum: N` standalone (JSON Schema 2020-12); no sibling `minimum`."
+
+  deprecated_keyword:
+    swagger-2.0:   "Operations: native `deprecated: true`. Parameters and schema properties: not supported — prepend 'Deprecated —' to the description instead."
+    openapi-3.x:   "Native `deprecated: true` on operations, parameters, and schema properties."
+
+  form_urlencoded_body:
+    swagger-2.0:   "`in: formData` parameters + `consumes: [application/x-www-form-urlencoded]`."
+    openapi-3.x:   "`requestBody` with `application/x-www-form-urlencoded` content."
+
+  event_stream:
+    swagger-2.0:   "`produces: [text/event-stream]` with a `type: string` response schema."
+    openapi-3.x:   "`text/event-stream` content entry with a `type: string` schema describing the SSE frames."
+
+  pipe_delimited_param:
+    swagger-2.0:   "`collectionFormat: pipes` on the array parameter."
+    openapi-3.x:   "`style: pipeDelimited, explode: false`."
+
+  deep_object_param:
+    swagger-2.0:   "Object query params unsupported — degrade to a single `type: string` param documented as URL-encoded `filter[key]=value` pairs."
+    openapi-3.x:   "`style: deepObject, explode: true` with an object schema."
+
+  callbacks:
+    swagger-2.0:   "Drop — not supported. Also drop schemas referenced only from callbacks."
+    openapi-3.x:   "Emit `callbacks:` on the operation, keyed by a runtime expression."
+
+  links:
+    swagger-2.0:   "Drop — not supported."
+    openapi-3.x:   "Emit `links:` on the response object."
 
 
 # -----------------------------------------------------------------------------
@@ -280,6 +328,38 @@ api:
         "204": { description: Password changed }
         "400": response_ref:BadRequest
 
+    - id: requestPasswordReset
+      method: POST
+      path: /auth/password-reset
+      tags: [auth]
+      summary: Request a password reset email
+      security: []
+      body: { required: true, content: { application/json: ref:PasswordResetRequest } }
+      responses:
+        "202": { description: "Accepted — if the address exists, a reset email is sent" }
+        "400": response_ref:BadRequest
+
+    - id: oauthToken
+      method: POST
+      path: /auth/token
+      tags: [auth]
+      summary: OAuth 2.0 token endpoint (form-encoded body)
+      security: []
+      body:
+        required: true
+        form_urlencoded:
+          required: [grant_type]
+          fields:
+            grant_type:    { type: string, enum: [password, refresh_token, client_credentials] }
+            username:      { type: string }
+            password:      { type: string, format: password }
+            refresh_token: { type: string }
+            scope:         { type: string, description: "Space-separated scope list" }
+      responses:
+        "200": { description: OK, content: { application/json: ref:TokenResponse } }
+        "400": { description: OAuth error, content: { application/json: ref:OAuthTokenError } }
+        default: { description: Unexpected error, content: { application/json: ref:Error } }
+
     - id: setup2FA
       method: POST
       path: /auth/2fa/setup
@@ -373,6 +453,24 @@ api:
       body: { required: true, content: { application/json: ref:UserPreferences } }
       responses:
         "200": { description: OK, content: { application/json: ref:UserPreferences } }
+        "400": response_ref:BadRequest
+
+    - id: getSettings
+      method: GET
+      path: /me/settings
+      tags: [account]
+      summary: Get raw user settings (dictionary of untagged primitive-union values)
+      responses:
+        "200": { description: OK, content: { application/json: ref:SettingsMap } }
+
+    - id: putSettings
+      method: PUT
+      path: /me/settings
+      tags: [account]
+      summary: Replace raw user settings
+      body: { required: true, content: { application/json: ref:SettingsMap } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:SettingsMap } }
         "400": response_ref:BadRequest
 
     # ===== Sessions =====
@@ -577,6 +675,16 @@ api:
         - { in: query, name: visibility, schema: ref:Visibility }
         - { in: query, name: tag, style: form, explode: true, schema: { type: array, items: { type: string } } }
         - { in: query, name: createdAfter, schema: { type: string, format: date-time } }
+        - in: query
+          name: filter
+          style: deepObject
+          explode: true
+          description: "Attribute filters, e.g. `filter[ownerId]=...&filter[archived]=true`"
+          schema:
+            type: object
+            properties:
+              ownerId:  { type: string, format: uuid }
+              archived: { type: boolean }
       responses:
         "200": { description: OK, content: { application/json: ref:ProjectPage } }
 
@@ -646,6 +754,16 @@ api:
             "application/zip":          { type: string, format: binary }
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { type: string, format: binary }
         "400": response_ref:BadRequest
+
+    - id: getProjectStats
+      method: GET
+      path: /projects/{projectId}/stats
+      tags: [projects]
+      summary: Numeric statistics for a project
+      path_params: [param_ref:ProjectIdParam]
+      responses:
+        "200": { description: OK, content: { application/json: ref:ProjectStats } }
+        "404": response_ref:NotFound
 
     # ===== Labels =====
     - id: listLabels
@@ -725,6 +843,7 @@ api:
         - { in: query, name: assignee, schema: { type: string, format: uuid } }
         - { in: query, name: priority, schema: ref:Priority }
         - { in: query, name: dueBefore, schema: { type: string, format: date } }
+        - { in: query, name: labels, style: pipeDelimited, explode: false, schema: { type: array, items: { type: string } }, description: "Pipe-delimited label names, e.g. `labels=bug|backend`" }
       responses:
         "200": { description: OK, content: { application/json: ref:TaskCursorPage } }
         "404": response_ref:NotFound
@@ -740,7 +859,13 @@ api:
         - { in: header, name: X-Idempotency-Key, required: true, schema: { type: string, format: uuid } }
       body: { required: true, content: { application/json: ref:TaskCreate } }
       responses:
-        "201": { description: Created, content: { application/json: ref:Task } }
+        "201":
+          description: Created
+          content: { application/json: ref:Task }
+          links:
+            GetTaskById:
+              operationId: getTask
+              parameters: { taskId: "$response.body#/id" }
         "400": response_ref:BadRequest
 
     - id: bulkCreateTasks
@@ -835,6 +960,7 @@ api:
               userId: ref:Id
       responses:
         "200": { description: OK, content: { application/json: ref:Task } }
+        "404": response_ref:NotFound
 
     - id: unassignTask
       method: DELETE
@@ -1005,6 +1131,23 @@ api:
             "application/pdf":          { type: string, format: binary }
         "404": response_ref:NotFound
 
+    - id: headAttachment
+      method: HEAD
+      path: /tasks/{taskId}/attachments/{attachmentId}
+      tags: [attachments]
+      summary: Probe an attachment via headers only (no body)
+      path_params:
+        - param_ref:TaskIdParam
+        - { name: attachmentId, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Headers describe the attachment; no body
+          headers:
+            Content-Length: { schema: { type: integer, format: int64 } }
+            Content-Type:   { schema: { type: string } }
+            ETag:           { schema: { type: string } }
+        "404": { description: Not found }
+
     - id: deleteAttachment
       method: DELETE
       path: /tasks/{taskId}/attachments/{attachmentId}
@@ -1072,6 +1215,17 @@ api:
               properties:
                 readCount: { type: integer, format: int32, minimum: 0 }
 
+    - id: streamNotifications
+      method: GET
+      path: /me/notifications/stream
+      tags: [notifications]
+      summary: Server-sent events stream of new notifications
+      responses:
+        "200":
+          description: "SSE stream — each `data:` frame is a JSON-encoded Notification"
+          content:
+            "text/event-stream": { type: string, description: "Server-sent events framing" }
+
     # ===== Search =====
     - id: search
       method: POST
@@ -1081,6 +1235,21 @@ api:
       body: { required: true, content: { application/json: ref:SearchRequest } }
       responses:
         "200": { description: OK, content: { application/json: ref:SearchResponse } }
+
+    - id: searchLegacy
+      method: GET
+      path: /search
+      tags: [search]
+      summary: Legacy query-string search
+      description: "Deprecated — use `POST /search` instead."
+      deprecated: true
+      params:
+        - { in: query, name: q, required: true, schema: { type: string, minLength: 1 } }
+        - { in: query, name: entity, deprecated: true, schema: ref:SearchEntityType, description: "Use POST /search `entities` instead." }
+        - { in: query, name: limit, schema: { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:SearchResponse } }
+        default: { description: Unexpected error, content: { application/json: ref:Error } }
 
     # ===== Reports =====
     - id: requestReport
@@ -1145,6 +1314,15 @@ api:
       summary: Create a webhook subscription
       security: [{ oauth2: ["write:webhooks"] }]
       body: { required: true, content: { application/json: ref:WebhookSubscriptionCreate } }
+      callbacks:
+        onEvent:
+          "{$request.body#/url}":
+            post:
+              summary: Event delivery to the subscriber URL
+              body: { required: true, content: { application/json: ref:WebhookCallbackPayload } }
+              responses:
+                "200": { description: Acknowledged }
+                "410": { description: "Gone — subscription will be disabled" }
       responses:
         "201": { description: Created, content: { application/json: ref:WebhookSubscription } }
 
@@ -1223,6 +1401,15 @@ api:
       security: []
       responses:
         "200": { description: OK, content: { application/json: ref:ServerInfo } }
+
+    - id: getKeywordFixture
+      method: GET
+      path: /fixtures/keywords
+      tags: [system]
+      summary: Fixture object exercising reserved-word and awkward property names
+      security: []
+      responses:
+        "200": { description: OK, content: { application/json: ref:KeywordStress } }
 
   # -------- Webhooks (3.1 only) --------
   webhooks:
@@ -1526,6 +1713,18 @@ api:
             items: ref:NotificationChannel
         digestFrequency: { type: string, enum: [never, daily, weekly], default: weekly }
 
+    SettingValue:
+      description: "Untagged primitive union — string | number | boolean. No discriminator; exercises scalar oneOf."
+      oneOf:
+        - { type: string }
+        - { type: number }
+        - { type: boolean }
+
+    SettingsMap:
+      type: object
+      description: "Dictionary of setting key -> untagged primitive value."
+      additionalProperties: ref:SettingValue
+
     Session:
       type: object
       required: [id, createdAt, ipAddress, userAgent, current]
@@ -1572,6 +1771,15 @@ api:
         refreshToken: { type: string, nullable: true }
         tokenType:    { const: Bearer }
         expiresIn:    { type: integer, format: int32 }
+
+    OAuthTokenError:
+      type: object
+      description: "RFC 6749 token error body — exercises snake_case property names."
+      required: [error]
+      properties:
+        error:             { type: string, enum: [invalid_request, invalid_client, invalid_grant, unauthorized_client, unsupported_grant_type, invalid_scope] }
+        error_description: { type: string, nullable: true }
+        error_uri:         { type: string, format: uri, nullable: true }
 
     RegisterRequest:
       type: object
@@ -1642,7 +1850,7 @@ api:
         - type: object
           required: [secret]
           properties:
-            secret: { type: string, writeOnly: true, description: "Full secret — shown only on creation" }
+            secret: { type: string, readOnly: true, description: "Full secret — shown only on creation" }
 
     # ===== Organizations =====
     Organization:
@@ -1726,7 +1934,7 @@ api:
         teamId:    ref:Id
         role:      ref:MembershipRole
         status:    ref:InvitationStatus
-        token:     { type: string, writeOnly: true, description: "Acceptance token (never returned after creation)" }
+        token:     { type: string, readOnly: true, description: "Acceptance token — returned only on creation, never on later reads" }
         invitedBy: ref:Id
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time, readOnly: true }
@@ -1797,6 +2005,37 @@ api:
         page:     { type: integer, format: int32 }
         pageSize: { type: integer, format: int32 }
         total:    { type: integer, format: int64 }
+
+    ProjectStats:
+      type: object
+      description: >
+        Numeric edge-case showcase: integer enum, exclusive bounds, multipleOf,
+        array-of-arrays, and a mixed object (fixed properties + typed
+        additionalProperties overflow map).
+      required: [projectId, taskCountByStatus, weeklyActivity, generatedAt]
+      properties:
+        projectId: ref:Id
+        taskCountByStatus:
+          description: "Map of TaskStatus -> count."
+          type: object
+          additionalProperties: { type: integer, format: int32, minimum: 0 }
+        busiestWeekday:    { type: integer, enum: [0, 1, 2, 3, 4, 5, 6], description: "Integer enum — 0 = Monday … 6 = Sunday" }
+        avgCycleTimeHours: { type: number, format: double, exclusiveMinimum: 0 }
+        onTimeRate:        { type: number, format: double, minimum: 0, maximum: 1 }
+        costPerTask:       { type: number, format: double, multipleOf: 0.01, nullable: true, description: "Rounded to cents" }
+        weeklyActivity:
+          description: "Array of weeks; each week is an array of exactly 7 daily counts (array-of-arrays)."
+          type: array
+          items:
+            type: array
+            items: { type: integer, format: int32, minimum: 0 }
+            minItems: 7
+            maxItems: 7
+        generatedAt: { type: string, format: date-time }
+      additionalProperties:
+        description: "Additional custom numeric metrics keyed by metric name."
+        type: number
+        format: double
 
     # ===== Tasks =====
     Task:
@@ -1931,7 +2170,7 @@ api:
         taskId:          ref:Id
         userId:          ref:Id
         durationMinutes: { type: integer, format: int32, minimum: 1 }
-        unit:            ref:TimeUnit
+        unit:            { allOf: [ref:TimeUnit], deprecated: true, description: "Deprecated — durations are always minutes." }
         note:            { type: string, nullable: true, maxLength: 1000 }
         billable:        { type: boolean, default: false }
         loggedAt:        { type: string, format: date-time }
@@ -1941,7 +2180,7 @@ api:
       required: [durationMinutes, loggedAt]
       properties:
         durationMinutes: { type: integer, format: int32, minimum: 1 }
-        unit:            ref:TimeUnit
+        unit:            { allOf: [ref:TimeUnit], deprecated: true, description: "Deprecated — durations are always minutes." }
         note:            { type: string, nullable: true }
         billable:        { type: boolean, default: false }
         loggedAt:        { type: string, format: date-time }
@@ -2118,6 +2357,11 @@ api:
           type: object
           description: "Map of reaction type -> count."
           additionalProperties: { type: integer, format: int32, minimum: 0 }
+        replies:
+          description: "Threaded replies — direct self-recursion (Comment contains Comments)."
+          type: array
+          items: ref:Comment
+          readOnly: true
         createdAt: { type: string, format: date-time, readOnly: true }
         editedAt:  { type: string, format: date-time, nullable: true, readOnly: true }
 
@@ -2213,9 +2457,12 @@ api:
         entities: { type: array, items: ref:SearchEntityType, uniqueItems: true }
         limit:    { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 }
         filters:
-          description: "Free-form key/value filters (server interprets per-entity)."
+          description: "Free-form filters (server interprets per-entity). Values are scalar or list — exercises anyOf."
           type: object
-          additionalProperties: { type: string }
+          additionalProperties:
+            anyOf:
+              - { type: string }
+              - { type: array, items: { type: string } }
 
     SearchResponse:
       type: object
@@ -2342,7 +2589,7 @@ api:
         url:         { type: string, format: uri }
         events:      { type: array, items: ref:WebhookEvent, uniqueItems: true, minItems: 1 }
         active:      { type: boolean, default: true }
-        secret:      { type: string, writeOnly: true, description: "HMAC signing secret (returned only on creation)" }
+        secret:      { type: string, readOnly: true, description: "HMAC signing secret (returned only on creation)" }
         description: { type: string, nullable: true, maxLength: 500 }
         createdAt:   { type: string, format: date-time, readOnly: true }
 
@@ -2367,6 +2614,17 @@ api:
         responseBody:   { type: string, nullable: true }
         nextRetryAt:    { type: string, format: date-time, nullable: true }
         createdAt:      { type: string, format: date-time, readOnly: true }
+
+    WebhookCallbackPayload:
+      type: object
+      description: "Envelope POSTed to the subscriber URL. Referenced only from the createWebhookSubscription callback — 3.x targets only."
+      required: [deliveryId, event, sentAt, payload]
+      properties:
+        deliveryId: ref:Id
+        event:      ref:WebhookEvent
+        sentAt:     { type: string, format: date-time }
+        payload:    { type: object, additionalProperties: true }
+        signature:  { type: string, nullable: true, description: "Hex-encoded HMAC-SHA256 of the body" }
 
     # ===== Webhook event payloads (used by `webhooks:`) =====
     TaskCreatedEvent:
@@ -2478,3 +2736,32 @@ api:
           description: "Map of feature flag -> enabled?"
           type: object
           additionalProperties: { type: boolean }
+
+    KeywordStress:
+      type: object
+      description: >
+        Property names that stress client generators: language keywords,
+        clashing casing styles, and characters that require quoting or
+        escaping in generated code. Closed object (additionalProperties: false).
+      additionalProperties: false
+      required: [class, default]
+      properties:
+        class:       { type: string }
+        constructor: { type: string, nullable: true }
+        default:     { type: string }
+        delete:      { type: boolean }
+        enum:        { type: string }
+        export:      { type: number }
+        import:      { type: string }
+        in:          { type: string }
+        new:         { type: boolean }
+        package:     { type: string }
+        snake_case_key:  { type: string }
+        kebab-case-key:  { type: string }
+        PascalCaseKey:   { type: string }
+        SCREAMING_SNAKE: { type: string }
+        "dotted.key":    { type: string }
+        "spaced key":    { type: string }
+        "123startsWithDigit": { type: string }
+        "$dollarSign":   { type: string }
+        "@atSign":       { type: string }
