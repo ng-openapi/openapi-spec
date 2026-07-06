@@ -129,6 +129,49 @@ paths:
         "204": { description: Password changed }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /auth/password-reset:
+    post:
+      tags: [auth]
+      summary: Request a password reset email
+      operationId: requestPasswordReset
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PasswordResetRequest" } } }
+      responses:
+        "202": { description: "Accepted — if the address exists, a reset email is sent" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /auth/token:
+    post:
+      tags: [auth]
+      summary: OAuth 2.0 token endpoint (form-encoded body)
+      operationId: oauthToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type]
+              properties:
+                grant_type:    { type: string, enum: [password, refresh_token, client_credentials] }
+                username:      { type: string }
+                password:      { type: string, format: password }
+                refresh_token: { type: string }
+                scope:         { type: string, description: "Space-separated scope list" }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/TokenResponse" } } }
+        "400":
+          description: OAuth error
+          content: { application/json: { schema: { $ref: "#/components/schemas/OAuthTokenError" } } }
+        default:
+          description: Unexpected error
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
   /auth/2fa/setup:
     post:
       tags: [auth]
@@ -235,6 +278,28 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/UserPreferences" } } }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /me/settings:
+    get:
+      tags: [account]
+      summary: Get raw user settings (dictionary of untagged primitive-union values)
+      operationId: getSettings
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/SettingsMap" } } }
+    put:
+      tags: [account]
+      summary: Replace raw user settings
+      operationId: putSettings
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SettingsMap" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/SettingsMap" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /me/sessions:
     get:
       tags: [sessions]
@@ -331,6 +396,18 @@ paths:
                 required: [readCount]
                 properties:
                   readCount: { type: integer, format: int32, minimum: 0 }
+
+  /me/notifications/stream:
+    get:
+      tags: [notifications]
+      summary: Server-sent events stream of new notifications
+      operationId: streamNotifications
+      responses:
+        "200":
+          description: "SSE stream — each `data:` frame is a JSON-encoded Notification"
+          content:
+            text/event-stream:
+              schema: { type: string, description: "Server-sent events framing" }
 
   /users:
     get:
@@ -512,6 +589,16 @@ paths:
         - { in: query, name: visibility, schema: { $ref: "#/components/schemas/Visibility" } }
         - { in: query, name: tag, style: form, explode: true, schema: { type: array, items: { type: string } } }
         - { in: query, name: createdAfter, schema: { type: string, format: date-time } }
+        - in: query
+          name: filter
+          style: deepObject
+          explode: true
+          description: "Attribute filters, e.g. `filter[ownerId]=...&filter[archived]=true`"
+          schema:
+            type: object
+            properties:
+              ownerId:  { type: string, format: uuid }
+              archived: { type: boolean }
       responses:
         "200":
           description: OK
@@ -551,6 +638,19 @@ paths:
             application/zip:                                                                { schema: { type: string, format: binary } }
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:              { schema: { type: string, format: binary } }
         "400": { $ref: "#/components/responses/BadRequest" }
+
+  /projects/{projectId}/stats:
+    get:
+      tags: [projects]
+      summary: Numeric statistics for a project
+      operationId: getProjectStats
+      parameters:
+        - { $ref: "#/components/parameters/ProjectIdParam" }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/ProjectStats" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /projects/{projectId}:
     parameters:
@@ -680,6 +780,7 @@ paths:
         - { in: query, name: assignee, schema: { type: string, format: uuid } }
         - { in: query, name: priority, schema: { $ref: "#/components/schemas/Priority" } }
         - { in: query, name: dueBefore, schema: { type: string, format: date } }
+        - { in: query, name: labels, style: pipeDelimited, explode: false, description: "Pipe-delimited label names, e.g. `labels=bug|backend`", schema: { type: array, items: { type: string } } }
       responses:
         "200":
           description: OK
@@ -699,6 +800,10 @@ paths:
         "201":
           description: Created
           content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+          links:
+            GetTaskById:
+              operationId: getTask
+              parameters: { taskId: "$response.body#/id" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /projects/{projectId}/tasks/bulk:
@@ -810,6 +915,7 @@ paths:
         "200":
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /tasks/{taskId}/assignees/{userId}:
     delete:
@@ -1002,6 +1108,18 @@ paths:
             image/jpeg:               { schema: { type: string, format: binary } }
             application/pdf:          { schema: { type: string, format: binary } }
         "404": { $ref: "#/components/responses/NotFound" }
+    head:
+      tags: [attachments]
+      summary: Probe an attachment via headers only (no body)
+      operationId: headAttachment
+      responses:
+        "200":
+          description: Headers describe the attachment; no body
+          headers:
+            Content-Length: { schema: { type: integer, format: int64 } }
+            Content-Type:   { schema: { type: string } }
+            ETag:           { schema: { type: string } }
+        "404": { description: Not found }
     delete:
       tags: [attachments]
       summary: Delete an attachment
@@ -1042,6 +1160,23 @@ paths:
         "200":
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/SearchResponse" } } }
+    get:
+      tags: [search]
+      summary: Legacy query-string search
+      description: "Deprecated — use `POST /search` instead."
+      operationId: searchLegacy
+      deprecated: true
+      parameters:
+        - { in: query, name: q, required: true, schema: { type: string, minLength: 1 } }
+        - { in: query, name: entity, deprecated: true, description: "Use POST /search `entities` instead.", schema: { $ref: "#/components/schemas/SearchEntityType" } }
+        - { in: query, name: limit, schema: { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/SearchResponse" } } }
+        default:
+          description: Unexpected error
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   /reports:
     post:
@@ -1114,6 +1249,17 @@ paths:
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/WebhookSubscriptionCreate" } } }
+      callbacks:
+        onEvent:
+          "{$request.body#/url}":
+            post:
+              summary: Event delivery to the subscriber URL
+              requestBody:
+                required: true
+                content: { application/json: { schema: { $ref: "#/components/schemas/WebhookCallbackPayload" } } }
+              responses:
+                "200": { description: Acknowledged }
+                "410": { description: "Gone — subscription will be disabled" }
       responses:
         "201":
           description: Created
@@ -1202,6 +1348,17 @@ paths:
         "200":
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/ServerInfo" } } }
+
+  /fixtures/keywords:
+    get:
+      tags: [system]
+      summary: Fixture object exercising reserved-word and awkward property names
+      operationId: getKeywordFixture
+      security: []
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/KeywordStress" } } }
 
 # -----------------------------------------------------------------------------
 # Components
@@ -1431,6 +1588,18 @@ components:
             items: { $ref: "#/components/schemas/NotificationChannel" }
         digestFrequency: { type: string, enum: [never, daily, weekly], default: weekly }
 
+    SettingValue:
+      description: "Untagged primitive union — string | number | boolean. No discriminator; exercises scalar oneOf."
+      oneOf:
+        - { type: string }
+        - { type: number }
+        - { type: boolean }
+
+    SettingsMap:
+      type: object
+      description: "Dictionary of setting key -> untagged primitive value."
+      additionalProperties: { $ref: "#/components/schemas/SettingValue" }
+
     Session:
       type: object
       required: [id, createdAt, ipAddress, userAgent, current]
@@ -1477,6 +1646,15 @@ components:
         refreshToken: { type: string, nullable: true }
         tokenType:    { type: string, enum: [Bearer] }
         expiresIn:    { type: integer, format: int32 }
+
+    OAuthTokenError:
+      type: object
+      description: "RFC 6749 token error body — exercises snake_case property names."
+      required: [error]
+      properties:
+        error:             { type: string, enum: [invalid_request, invalid_client, invalid_grant, unauthorized_client, unsupported_grant_type, invalid_scope] }
+        error_description: { type: string, nullable: true }
+        error_uri:         { type: string, format: uri, nullable: true }
 
     RegisterRequest:
       type: object
@@ -1547,7 +1725,7 @@ components:
         - type: object
           required: [secret]
           properties:
-            secret: { type: string, writeOnly: true, description: "Full secret — shown only on creation" }
+            secret: { type: string, readOnly: true, description: "Full secret — shown only on creation" }
 
     # ===== Organizations =====
     Organization:
@@ -1631,7 +1809,7 @@ components:
         teamId:    { $ref: "#/components/schemas/Id" }
         role:      { $ref: "#/components/schemas/MembershipRole" }
         status:    { $ref: "#/components/schemas/InvitationStatus" }
-        token:     { type: string, writeOnly: true, description: "Acceptance token (never returned after creation)" }
+        token:     { type: string, readOnly: true, description: "Acceptance token — returned only on creation, never on later reads" }
         invitedBy: { $ref: "#/components/schemas/Id" }
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time, readOnly: true }
@@ -1702,6 +1880,37 @@ components:
         page:     { type: integer, format: int32 }
         pageSize: { type: integer, format: int32 }
         total:    { type: integer, format: int64 }
+
+    ProjectStats:
+      type: object
+      description: >
+        Numeric edge-case showcase: integer enum, exclusive bounds, multipleOf,
+        array-of-arrays, and a mixed object (fixed properties + typed
+        additionalProperties overflow map).
+      required: [projectId, taskCountByStatus, weeklyActivity, generatedAt]
+      properties:
+        projectId: { $ref: "#/components/schemas/Id" }
+        taskCountByStatus:
+          type: object
+          description: "Map of TaskStatus -> count."
+          additionalProperties: { type: integer, format: int32, minimum: 0 }
+        busiestWeekday:    { type: integer, enum: [0, 1, 2, 3, 4, 5, 6], description: "Integer enum — 0 = Monday … 6 = Sunday" }
+        avgCycleTimeHours: { type: number, format: double, minimum: 0, exclusiveMinimum: true }
+        onTimeRate:        { type: number, format: double, minimum: 0, maximum: 1 }
+        costPerTask:       { type: number, format: double, multipleOf: 0.01, nullable: true, description: "Rounded to cents" }
+        weeklyActivity:
+          type: array
+          description: "Array of weeks; each week is an array of exactly 7 daily counts (array-of-arrays)."
+          items:
+            type: array
+            items: { type: integer, format: int32, minimum: 0 }
+            minItems: 7
+            maxItems: 7
+        generatedAt: { type: string, format: date-time }
+      additionalProperties:
+        description: "Additional custom numeric metrics keyed by metric name."
+        type: number
+        format: double
 
     # ===== Tasks =====
     Task:
@@ -1836,7 +2045,10 @@ components:
         taskId:          { $ref: "#/components/schemas/Id" }
         userId:          { $ref: "#/components/schemas/Id" }
         durationMinutes: { type: integer, format: int32, minimum: 1 }
-        unit:            { $ref: "#/components/schemas/TimeUnit" }
+        unit:
+          allOf: [{ $ref: "#/components/schemas/TimeUnit" }]
+          deprecated: true
+          description: "Deprecated — durations are always minutes."
         note:            { type: string, maxLength: 1000, nullable: true }
         billable:        { type: boolean, default: false }
         loggedAt:        { type: string, format: date-time }
@@ -1846,7 +2058,10 @@ components:
       required: [durationMinutes, loggedAt]
       properties:
         durationMinutes: { type: integer, format: int32, minimum: 1 }
-        unit:            { $ref: "#/components/schemas/TimeUnit" }
+        unit:
+          allOf: [{ $ref: "#/components/schemas/TimeUnit" }]
+          deprecated: true
+          description: "Deprecated — durations are always minutes."
         note:            { type: string, nullable: true }
         billable:        { type: boolean, default: false }
         loggedAt:        { type: string, format: date-time }
@@ -2026,6 +2241,11 @@ components:
           type: object
           description: "Map of reaction type -> count."
           additionalProperties: { type: integer, format: int32, minimum: 0 }
+        replies:
+          type: array
+          description: "Threaded replies — direct self-recursion (Comment contains Comments)."
+          items: { $ref: "#/components/schemas/Comment" }
+          readOnly: true
         createdAt: { type: string, format: date-time, readOnly: true }
         editedAt:  { type: string, format: date-time, nullable: true, readOnly: true }
 
@@ -2122,8 +2342,11 @@ components:
         limit:    { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 }
         filters:
           type: object
-          description: "Free-form key/value filters (server interprets per-entity)."
-          additionalProperties: { type: string }
+          description: "Free-form filters (server interprets per-entity). Values are scalar or list — exercises anyOf."
+          additionalProperties:
+            anyOf:
+              - { type: string }
+              - { type: array, items: { type: string } }
 
     SearchResponse:
       type: object
@@ -2250,7 +2473,7 @@ components:
         url:         { type: string, format: uri }
         events:      { type: array, items: { $ref: "#/components/schemas/WebhookEvent" }, uniqueItems: true, minItems: 1 }
         active:      { type: boolean, default: true }
-        secret:      { type: string, writeOnly: true, description: "HMAC signing secret (returned only on creation)" }
+        secret:      { type: string, readOnly: true, description: "HMAC signing secret (returned only on creation)" }
         description: { type: string, maxLength: 500, nullable: true }
         createdAt:   { type: string, format: date-time, readOnly: true }
 
@@ -2275,6 +2498,17 @@ components:
         responseBody:   { type: string, nullable: true }
         nextRetryAt:    { type: string, format: date-time, nullable: true }
         createdAt:      { type: string, format: date-time, readOnly: true }
+
+    WebhookCallbackPayload:
+      type: object
+      description: "Envelope POSTed to the subscriber URL. Referenced only from the createWebhookSubscription callback — 3.x targets only."
+      required: [deliveryId, event, sentAt, payload]
+      properties:
+        deliveryId: { $ref: "#/components/schemas/Id" }
+        event:      { $ref: "#/components/schemas/WebhookEvent" }
+        sentAt:     { type: string, format: date-time }
+        payload:    { type: object, additionalProperties: true }
+        signature:  { type: string, nullable: true, description: "Hex-encoded HMAC-SHA256 of the body" }
 
     # ===== Webhook event payloads (still defined here even though no `webhooks:` section in 3.0) =====
     TaskCreatedEvent:
@@ -2386,3 +2620,32 @@ components:
           type: object
           description: "Map of feature flag -> enabled?"
           additionalProperties: { type: boolean }
+
+    KeywordStress:
+      type: object
+      description: >
+        Property names that stress client generators: language keywords,
+        clashing casing styles, and characters that require quoting or
+        escaping in generated code. Closed object (additionalProperties: false).
+      additionalProperties: false
+      required: [class, default]
+      properties:
+        class:       { type: string }
+        constructor: { type: string, nullable: true }
+        default:     { type: string }
+        delete:      { type: boolean }
+        enum:        { type: string }
+        export:      { type: number }
+        import:      { type: string }
+        in:          { type: string }
+        new:         { type: boolean }
+        package:     { type: string }
+        snake_case_key:  { type: string }
+        kebab-case-key:  { type: string }
+        PascalCaseKey:   { type: string }
+        SCREAMING_SNAKE: { type: string }
+        "dotted.key":    { type: string }
+        "spaced key":    { type: string }
+        "123startsWithDigit": { type: string }
+        "$dollarSign":   { type: string }
+        "@atSign":       { type: string }
