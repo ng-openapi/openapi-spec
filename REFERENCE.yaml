@@ -91,6 +91,9 @@ rendering_rules:
     pre-3.1:       "Emit `license: { name, url }` — `identifier` is not supported."
     openapi-3.1.0: "Emit `license: { name, identifier }` only — drop `url`. `identifier` and `url` are mutually exclusive in 3.1 (spec rejects both)."
 
+  enum_member_names:
+    all:           "Emit `x-enumNames`, `x-enum-varnames` and a JSON-encoded enum `description` unchanged in every target."
+
 
 # -----------------------------------------------------------------------------
 # Targets — where each rendered spec goes
@@ -1403,6 +1406,27 @@ api:
       type: string
       enum: [string, number, date, boolean, enum, multi_enum]
 
+    # ===== Enums with member names =====
+    # Names a generator can use for the members instead of deriving them from
+    # the values: ng-openapi's `enumNameExtensions` and
+    # `generateEnumBasedOnDescription` options.
+    TaskEffort:
+      type: integer
+      format: int32
+      enum: [0, 1, 2, 3]
+      x-enumNames: [None, Small, Medium, Large]
+      description: "T-shirt size of a task. Member names in `x-enumNames`, as NSwag writes them."
+    SyncState:
+      type: string
+      enum: [idle, in-progress, failed]
+      x-enum-varnames: [SYNC_IDLE, SYNC_IN_PROGRESS, SYNC_FAILED]
+      description: "State of the sync with an external tracker. Member names in `x-enum-varnames`, as OpenAPI Generator reads them."
+    ReminderLeadTime:
+      type: integer
+      format: int32
+      enum: [0, 15, 60, 1440]
+      description: '[{"Name":"AtDueTime","Value":0},{"Name":"QuarterHour","Value":15},{"Name":"OneHour","Value":60},{"Name":"OneDay","Value":1440}]'
+
     # ===== Generic value objects =====
     GeoPoint:
       description: "Tuple of [longitude, latitude]."
@@ -1819,6 +1843,9 @@ api:
         estimateMinutes: { type: integer, format: int32, minimum: 0, nullable: true }
         actualMinutes:   { type: integer, format: int32, minimum: 0, readOnly: true }
         progress:        { type: number, format: float, minimum: 0, maximum: 1, nullable: true }
+        effort:          ref:TaskEffort
+        syncState:       ref:SyncState
+        reminderLeadTime: ref:ReminderLeadTime
         location:        { allOf: [ref:GeoPoint], nullable: true }
         customFields:
           type: object
