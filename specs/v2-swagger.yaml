@@ -1428,6 +1428,27 @@ definitions:
   HealthStatus:          { type: string, enum: [up, degraded, down] }
   CustomFieldType:       { type: string, enum: [string, number, date, boolean, enum, multi_enum] }
 
+  # ===== Enums with member names =====
+  # Names a generator can use for the members instead of deriving them from
+  # the values: ng-openapi's `enumNameExtensions` and
+  # `generateEnumBasedOnDescription` options.
+  TaskEffort:
+    type: integer
+    format: int32
+    enum: [0, 1, 2, 3]
+    x-enumNames: [None, Small, Medium, Large]
+    description: "T-shirt size of a task. Member names in `x-enumNames`, as NSwag writes them."
+  SyncState:
+    type: string
+    enum: [idle, in-progress, failed]
+    x-enum-varnames: [SYNC_IDLE, SYNC_IN_PROGRESS, SYNC_FAILED]
+    description: "State of the sync with an external tracker. Member names in `x-enum-varnames`, as OpenAPI Generator reads them."
+  ReminderLeadTime:
+    type: integer
+    format: int32
+    enum: [0, 15, 60, 1440]
+    description: '[{"Name":"AtDueTime","Value":0},{"Name":"QuarterHour","Value":15},{"Name":"OneHour","Value":60},{"Name":"OneDay","Value":1440}]'
+
   # ===== Generic value objects =====
   GeoPoint:
     type: array
@@ -1841,6 +1862,9 @@ definitions:
       estimateMinutes: { type: integer, format: int32, minimum: 0 }
       actualMinutes:   { type: integer, format: int32, minimum: 0, readOnly: true }
       progress:        { type: number, format: float, minimum: 0, maximum: 1 }
+      effort:          { $ref: "#/definitions/TaskEffort" }
+      syncState:       { $ref: "#/definitions/SyncState" }
+      reminderLeadTime: { $ref: "#/definitions/ReminderLeadTime" }
       location:        { $ref: "#/definitions/GeoPoint" }
       customFields:
         type: object
