@@ -25,6 +25,8 @@
 #   prefixItems:       -> rendered per rendering_rules.prefix_items
 #   webhooks:          -> rendered only in 3.1+ targets
 #   method: QUERY      -> rendered only in 3.2 targets (rendering_rules.query_method)
+#   method: COPY, …    -> a method without a path-item field; rendered only in
+#                         3.2 targets (rendering_rules.additional_operations)
 #   body.urlencoded    -> form body (rendered per rendering_rules.urlencoded_body)
 #   additionalProperties: ref:X   -> map / dictionary value type
 # =============================================================================
@@ -107,6 +109,10 @@ rendering_rules:
   query_method:
     pre-3.2:       "Drop the operation — the Path Item Object has no `query` field before OpenAPI 3.2 — together with the schemas only it references."
     openapi-3.2.0: "Emit an operation with `method: QUERY` under the `query:` field of its path item, with its `body:` as `requestBody` like any other body."
+
+  additional_operations:
+    pre-3.2:       "Drop the operation — before OpenAPI 3.2 a path item can only declare the methods it has a field for — together with the schemas only it references."
+    openapi-3.2.0: "Emit an operation whose `method:` has no path-item field (COPY, PURGE, …) under `additionalOperations:` of its path item, keyed by the method in upper case, after the fixed method fields."
 
   urlencoded_body:
     swagger-2.0:   "`in: formData` parameters with `consumes: [application/x-www-form-urlencoded]`."
@@ -878,6 +884,22 @@ api:
       path_params: [param_ref:TaskIdParam]
       responses:
         "204": { description: Deleted }
+        "404": response_ref:NotFound
+
+    # A method the Path Item Object has no field for
+    # (rendering_rules.additional_operations). Rendered only in the 3.2
+    # target (ng-openapi/ng-openapi#136).
+    - id: copyTask
+      method: COPY
+      path: /tasks/{taskId}
+      tags: [tasks]
+      summary: Copy a task into a project
+      description: "COPY has no field on the path item, so OpenAPI 3.2 declares it under `additionalOperations`."
+      security: [{ oauth2: ["write:tasks"] }]
+      path_params: [param_ref:TaskIdParam]
+      body: { required: true, content: { application/json: ref:TaskCopy } }
+      responses:
+        "201": { description: Created, content: { application/json: ref:Task } }
         "404": response_ref:NotFound
 
     - id: assignTask
@@ -1965,6 +1987,15 @@ api:
         createdAt:   { type: string, format: date-time, readOnly: true }
         updatedAt:   { type: string, format: date-time, readOnly: true }
         closedAt:    { type: string, format: date-time, nullable: true, readOnly: true }
+
+    # Body of the copyTask COPY operation (3.2 target only).
+    TaskCopy:
+      type: object
+      required: [targetProjectId]
+      properties:
+        targetProjectId: { type: string, format: uuid }
+        includeSubtasks: { type: boolean, default: false }
+        title:           { type: string, maxLength: 200, description: "Title of the copy; defaults to the original's." }
 
     TaskCreate:
       type: object
