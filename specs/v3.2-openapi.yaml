@@ -829,6 +829,57 @@ paths:
             content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
           "404": { $ref: "#/components/responses/NotFound" }
 
+  /projects/{projectId}/tasks/filter:
+    get:
+      tags: [tasks]
+      summary: Filter tasks with a form-encoded query string
+      description: "The properties of the schema are the `key=value` pairs of the query string."
+      operationId: filterProjectTasks
+      parameters:
+        - { $ref: "#/components/parameters/ProjectIdParam" }
+        - name: filter
+          in: querystring
+          required: true
+          content:
+            application/x-www-form-urlencoded: { schema: { $ref: "#/components/schemas/TaskFilter" } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskCursorPage" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/match:
+    get:
+      tags: [tasks]
+      summary: Match tasks against a JSON document sent as the whole query string
+      operationId: matchTasks
+      parameters:
+        - name: criteria
+          in: querystring
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/TaskQuery" } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Task" } } } }
+
+  /tasks/select:
+    get:
+      tags: [tasks]
+      summary: Select tasks with a JSONPath expression sent as the whole query string
+      operationId: selectTasks
+      parameters:
+        - name: selector
+          in: querystring
+          required: true
+          content:
+            application/jsonpath: { schema: { type: string }, example: "$.items[?@.priority=='high']" }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Task" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /tasks/{taskId}/tree:
     get:
       tags: [tasks]
@@ -1987,6 +2038,16 @@ components:
         dueAfter:        { type: [string, "null"], format: date }
         dueBefore:       { type: [string, "null"], format: date }
         includeArchived: { type: boolean, default: false }
+
+    TaskFilter:
+      type: object
+      required: [status]
+      properties:
+        status:     { $ref: "#/components/schemas/TaskStatus" }
+        priority:   { $ref: "#/components/schemas/Priority" }
+        assignee:   { type: string, format: uuid }
+        due-before: { type: string, format: date }
+        labels:     { type: array, items: { type: string } }
 
     TaskTree:
       type: object

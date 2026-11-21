@@ -28,6 +28,8 @@
 #   method: COPY, …    -> a method without a path-item field; rendered only in
 #                         3.2 targets (rendering_rules.additional_operations)
 #   body.urlencoded    -> form body (rendered per rendering_rules.urlencoded_body)
+#   in: querystring    -> a parameter that is the whole query string; rendered
+#                         only in 3.2 targets (rendering_rules.querystring_parameter)
 #   additionalProperties: ref:X   -> map / dictionary value type
 # =============================================================================
 
@@ -109,6 +111,10 @@ rendering_rules:
   query_method:
     pre-3.2:       "Drop the operation — the Path Item Object has no `query` field before OpenAPI 3.2 — together with the schemas only it references."
     openapi-3.2.0: "Emit an operation with `method: QUERY` under the `query:` field of its path item, with its `body:` as `requestBody` like any other body."
+
+  querystring_parameter:
+    pre-3.2:       "Drop the operation — `in: querystring` does not exist before OpenAPI 3.2, and its operations are declared here only to exercise it — together with the schemas only it references."
+    openapi-3.2.0: "Emit the parameter with `in: querystring` and its single media type under `content:`, never with `schema:` or `style:`."
 
   additional_operations:
     pre-3.2:       "Drop the operation — before OpenAPI 3.2 a path item can only declare the methods it has a field for — together with the schemas only it references."
@@ -849,6 +855,43 @@ api:
       responses:
         "200": { description: OK, content: { application/json: ref:Task } }
         "404": response_ref:NotFound
+
+    # `in: querystring` (rendering_rules.querystring_parameter): one parameter
+    # that is the entire query string, in the three shapes a client has to
+    # handle. Rendered only in the 3.2 target (ng-openapi/ng-openapi#136).
+    - id: filterProjectTasks
+      method: GET
+      path: /projects/{projectId}/tasks/filter
+      tags: [tasks]
+      summary: Filter tasks with a form-encoded query string
+      description: "The properties of the schema are the `key=value` pairs of the query string."
+      path_params: [param_ref:ProjectIdParam]
+      params:
+        - { in: querystring, name: filter, required: true, content: { application/x-www-form-urlencoded: ref:TaskFilter } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:TaskCursorPage } }
+        "404": response_ref:NotFound
+
+    - id: matchTasks
+      method: GET
+      path: /tasks/match
+      tags: [tasks]
+      summary: Match tasks against a JSON document sent as the whole query string
+      params:
+        - { in: querystring, name: criteria, content: { application/json: ref:TaskQuery } }
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:Task } } }
+
+    - id: selectTasks
+      method: GET
+      path: /tasks/select
+      tags: [tasks]
+      summary: Select tasks with a JSONPath expression sent as the whole query string
+      params:
+        - { in: querystring, name: selector, required: true, content: { application/jsonpath: { type: string, example: "$.items[?@.priority=='high']" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:Task } } }
+        "400": response_ref:BadRequest
 
     - id: getTaskTree
       method: GET
@@ -2047,6 +2090,17 @@ api:
         dueAfter:        { type: string, format: date, nullable: true }
         dueBefore:       { type: string, format: date, nullable: true }
         includeArchived: { type: boolean, default: false }
+
+    # The form-encoded `in: querystring` parameter of filterProjectTasks (3.2 target only).
+    TaskFilter:
+      type: object
+      required: [status]
+      properties:
+        status:     ref:TaskStatus
+        priority:   ref:Priority
+        assignee:   { type: string, format: uuid }
+        due-before: { type: string, format: date }
+        labels:     { type: array, items: { type: string } }
 
     TaskTree:
       type: object
