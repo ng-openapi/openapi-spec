@@ -57,7 +57,7 @@ tags:
   - { name: webhookDeliveries, description: "Webhook delivery log" }
   - { name: audit,             description: "Audit log" }
   - { name: system,            description: "Health, ping, server info" }
-  - { name: webhooks,          description: "Webhook event payloads (3.1 only)" }
+  - { name: webhooks,          description: "Webhook event payloads (3.1+)" }
 
 security:
   - bearerAuth: []
@@ -721,6 +721,22 @@ paths:
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/BulkOperationResult" } } }
         "400": { $ref: "#/components/responses/BadRequest" }
+    delete:
+      tags: [tasks]
+      summary: Delete many tasks in a single request
+      description: "The task ids travel in the request body. A body on DELETE is unusual but valid: RFC 9110 allows it once the server has said it supports one, and declaring it here is that statement."
+      operationId: bulkDeleteTasks
+      security: [{ oauth2: ["write:tasks"] }]
+      parameters:
+        - { $ref: "#/components/parameters/ProjectIdParam" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BulkTaskDelete" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/BulkOperationResult" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
 
   /projects/{projectId}/tasks/import:
     post:
@@ -1208,7 +1224,7 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/ServerInfo" } } }
 
 # -----------------------------------------------------------------------------
-# Webhooks (3.1 only)
+# Webhooks (3.1+)
 # -----------------------------------------------------------------------------
 webhooks:
 
@@ -1875,6 +1891,17 @@ components:
           maxItems: 500
           items: { $ref: "#/components/schemas/TaskCreate" }
         stopOnError: { type: boolean, default: false }
+
+    BulkTaskDelete:
+      type: object
+      required: [taskIds]
+      properties:
+        taskIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { type: string, format: uuid }
+        permanent: { type: boolean, default: false, description: "Skip the trash and delete for good." }
 
     BulkOperationResult:
       type: object

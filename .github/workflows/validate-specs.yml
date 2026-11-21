@@ -25,6 +25,7 @@ jobs:
           - specs/v2-swagger.yaml
           - specs/v3.0-openapi.yaml
           - specs/v3.1-openapi.yaml
+          - specs/v3.2-openapi.yaml
     steps:
       - uses: actions/checkout@v4
 
@@ -35,5 +36,10 @@ jobs:
       - name: Redocly lint
         run: npx --yes @redocly/cli@latest lint "${{ matrix.spec }}" --format=stylish
 
+      # Spectral's oas ruleset has no OpenAPI 3.2 schema yet: it validates a
+      # 3.2 document against the 3.0 one and rejects `query` operations and
+      # everything 3.1 added. Redocly above does validate 3.2. Drop this
+      # condition once Spectral recognizes `openapi: 3.2.x`.
       - name: Spectral lint (oas ruleset)
+        if: matrix.spec != 'specs/v3.2-openapi.yaml'
         run: npx --yes @stoplight/spectral-cli@latest lint "${{ matrix.spec }}" --ruleset .spectral.yaml --fail-severity=error
