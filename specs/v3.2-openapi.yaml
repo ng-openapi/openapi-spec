@@ -813,6 +813,21 @@ paths:
       responses:
         "204": { description: Deleted }
         "404": { $ref: "#/components/responses/NotFound" }
+    additionalOperations:
+      COPY:
+        tags: [tasks]
+        summary: Copy a task into a project
+        description: "COPY has no field on the path item, so OpenAPI 3.2 declares it under `additionalOperations`."
+        operationId: copyTask
+        security: [{ oauth2: ["write:tasks"] }]
+        requestBody:
+          required: true
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskCopy" } } }
+        responses:
+          "201":
+            description: Created
+            content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+          "404": { $ref: "#/components/responses/NotFound" }
 
   /tasks/{taskId}/tree:
     get:
@@ -1914,6 +1929,14 @@ components:
         createdAt: { type: string, format: date-time, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
         closedAt:  { type: [string, "null"], format: date-time, readOnly: true }
+
+    TaskCopy:
+      type: object
+      required: [targetProjectId]
+      properties:
+        targetProjectId: { type: string, format: uuid }
+        includeSubtasks: { type: boolean, default: false }
+        title:           { type: string, maxLength: 200, description: "Title of the copy; defaults to the original's." }
 
     TaskCreate:
       type: object
