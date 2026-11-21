@@ -30,6 +30,9 @@
 #   body.urlencoded    -> form body (rendered per rendering_rules.urlencoded_body)
 #   in: querystring    -> a parameter that is the whole query string; rendered
 #                         only in 3.2 targets (rendering_rules.querystring_parameter)
+#   stream: { <media type>: ref:X }
+#                      -> a response that is a stream of X items; rendered only
+#                         in 3.2 targets (rendering_rules.item_schema)
 #   additionalProperties: ref:X   -> map / dictionary value type
 # =============================================================================
 
@@ -111,6 +114,10 @@ rendering_rules:
   query_method:
     pre-3.2:       "Drop the operation — the Path Item Object has no `query` field before OpenAPI 3.2 — together with the schemas only it references."
     openapi-3.2.0: "Emit an operation with `method: QUERY` under the `query:` field of its path item, with its `body:` as `requestBody` like any other body."
+
+  item_schema:
+    pre-3.2:       "Drop the operation — `itemSchema` does not exist before OpenAPI 3.2, and its operations are declared here only to exercise it — together with the schemas only it references."
+    openapi-3.2.0: "Emit a response's `stream: { <media type>: ref:X }` as that media type with `itemSchema: { $ref: X }` and no `schema`. A sequential media type under `content:` is a complete response and keeps its array `schema`."
 
   querystring_parameter:
     pre-3.2:       "Drop the operation — `in: querystring` does not exist before OpenAPI 3.2, and its operations are declared here only to exercise it — together with the schemas only it references."
@@ -1351,6 +1358,52 @@ api:
         - { in: query, name: to,   schema: { type: string, format: date-time } }
       responses:
         "200": { description: OK, content: { application/json: ref:AuditLogPage } }
+
+    # Sequential media types (rendering_rules.item_schema): a stream of items
+    # in each format a client has to read, and one response of the same kind
+    # that is declared complete. Rendered only in the 3.2 target
+    # (ng-openapi/ng-openapi#136).
+    - id: streamAuditLog
+      method: GET
+      path: /audit-log/stream
+      tags: [audit]
+      summary: Stream audit log entries as JSON Lines
+      description: "One JSON document per line; `itemSchema` describes each line."
+      security: [{ oauth2: [admin] }]
+      params:
+        - { in: query, name: since, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: A line per entry, stream: { application/jsonl: ref:AuditLogEntry } }
+
+    - id: replayAuditLog
+      method: POST
+      path: /audit-log/replay
+      tags: [audit]
+      summary: Replay the audit log entries that match a filter as a JSON text sequence
+      security: [{ oauth2: [admin] }]
+      body: { required: true, content: { application/json: ref:AuditLogQuery } }
+      responses:
+        "200": { description: A record per entry, stream: { application/json-seq: ref:AuditLogEntry } }
+        "400": response_ref:BadRequest
+
+    - id: listAuditLogArchive
+      method: GET
+      path: /audit-log/archive
+      tags: [audit]
+      summary: Download the archived audit log as NDJSON
+      description: "A sequential media type declared complete: an array `schema`, not `itemSchema`."
+      security: [{ oauth2: [admin] }]
+      responses:
+        "200": { description: Every archived entry, content: { application/x-ndjson: { type: array, items: ref:AuditLogEntry } } }
+
+    - id: watchNotifications
+      method: GET
+      path: /me/notifications/events
+      tags: [notifications]
+      summary: Watch notifications as Server-Sent Events
+      description: "A stream that does not end. Each event's `data` is the JSON text of a notification."
+      responses:
+        "200": { description: An event per notification, stream: { text/event-stream: ref:NotificationEvent } }
 
     # QUERY whose response is a file download, not JSON.
     - id: exportAuditLog
@@ -2680,6 +2733,17 @@ api:
           type: object
           additionalProperties: true
         occurredAt: { type: string, format: date-time, readOnly: true }
+
+    # One event of the watchNotifications stream (3.2 target only): the generic
+    # shape of a Server-Sent Event, with the event names this API sends.
+    NotificationEvent:
+      type: object
+      required: [data]
+      properties:
+        event: { type: string, enum: [notification.created, notification.read] }
+        data:  { type: string, description: "A Notification, as JSON text." }
+        id:    { type: string }
+        retry: { type: integer, minimum: 0 }
 
     # Body of the exportAuditLog QUERY operation (3.2 target only).
     AuditLogQuery:

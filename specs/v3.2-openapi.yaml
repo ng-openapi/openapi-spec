@@ -1311,6 +1311,58 @@ paths:
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/AuditLogPage" } } }
 
+  /audit-log/stream:
+    get:
+      tags: [audit]
+      summary: Stream audit log entries as JSON Lines
+      description: "One JSON document per line; `itemSchema` describes each line."
+      operationId: streamAuditLog
+      security: [{ oauth2: [admin] }]
+      parameters:
+        - { in: query, name: since, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: A line per entry
+          content: { application/jsonl: { itemSchema: { $ref: "#/components/schemas/AuditLogEntry" } } }
+
+  /audit-log/replay:
+    post:
+      tags: [audit]
+      summary: Replay the audit log entries that match a filter as a JSON text sequence
+      operationId: replayAuditLog
+      security: [{ oauth2: [admin] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AuditLogQuery" } } }
+      responses:
+        "200":
+          description: A record per entry
+          content: { application/json-seq: { itemSchema: { $ref: "#/components/schemas/AuditLogEntry" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /audit-log/archive:
+    get:
+      tags: [audit]
+      summary: Download the archived audit log as NDJSON
+      description: "A sequential media type declared complete: an array `schema`, not `itemSchema`."
+      operationId: listAuditLogArchive
+      security: [{ oauth2: [admin] }]
+      responses:
+        "200":
+          description: Every archived entry
+          content: { application/x-ndjson: { schema: { type: array, items: { $ref: "#/components/schemas/AuditLogEntry" } } } }
+
+  /me/notifications/events:
+    get:
+      tags: [notifications]
+      summary: Watch notifications as Server-Sent Events
+      description: "A stream that does not end. Each event's `data` is the JSON text of a notification."
+      operationId: watchNotifications
+      responses:
+        "200":
+          description: An event per notification
+          content: { text/event-stream: { itemSchema: { $ref: "#/components/schemas/NotificationEvent" } } }
+
   /audit-log/export:
     query:
       tags: [audit]
@@ -2630,6 +2682,15 @@ components:
           description: "Action-specific structured context."
           additionalProperties: true
         occurredAt: { type: string, format: date-time, readOnly: true }
+
+    NotificationEvent:
+      type: object
+      required: [data]
+      properties:
+        event: { type: string, enum: [notification.created, notification.read] }
+        data:  { type: string, description: "A Notification, as JSON text." }
+        id:    { type: string }
+        retry: { type: integer, minimum: 0 }
 
     AuditLogQuery:
       type: object
