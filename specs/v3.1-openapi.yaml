@@ -57,7 +57,7 @@ tags:
   - { name: webhookDeliveries, description: "Webhook delivery log" }
   - { name: audit,             description: "Audit log" }
   - { name: system,            description: "Health, ping, server info" }
-  - { name: webhooks,          description: "Webhook event payloads (3.1 only)" }
+  - { name: webhooks,          description: "Webhook event payloads (3.1+)" }
 
 security:
   - bearerAuth: []
@@ -1224,7 +1224,7 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/ServerInfo" } } }
 
 # -----------------------------------------------------------------------------
-# Webhooks (3.1 only)
+# Webhooks (3.1+)
 # -----------------------------------------------------------------------------
 webhooks:
 

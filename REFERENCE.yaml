@@ -2,9 +2,10 @@
 # REFERENCE.yaml
 #
 # Single source of truth for the OpenAPI fixture specs under `specs/`.
-# There is ONE API defined here. It is rendered into three files — one per
-# OpenAPI version (Swagger 2.0, OpenAPI 3.0, OpenAPI 3.1). The CONTENT of all
-# three rendered files is the same API; only the SYNTAX is version-adjusted.
+# There is ONE API defined here. It is rendered into four files — one per
+# OpenAPI version (Swagger 2.0, OpenAPI 3.0, OpenAPI 3.1, OpenAPI 3.2). The
+# CONTENT of all rendered files is the same API; only the SYNTAX is
+# version-adjusted, and a construct a version cannot express is left out of it.
 #
 # WORKFLOW
 #   1. Edit `api:` below to add/change endpoints, schemas, security, etc.
@@ -22,7 +23,9 @@
 #   file upload via    body.multipart  (rendered per rendering_rules.file_upload)
 #   const: VALUE       -> rendered per rendering_rules.const_keyword
 #   prefixItems:       -> rendered per rendering_rules.prefix_items
-#   webhooks:          -> rendered only in 3.1 targets
+#   webhooks:          -> rendered only in 3.1+ targets
+#   method: QUERY      -> rendered only in 3.2 targets (rendering_rules.query_method)
+#   body.urlencoded    -> form body (rendered per rendering_rules.urlencoded_body)
 #   additionalProperties: ref:X   -> map / dictionary value type
 # =============================================================================
 
@@ -98,6 +101,17 @@ rendering_rules:
     swagger-2.0:   "Emit the `body:` of a DELETE operation as an `in: body` parameter, like any other body."
     openapi-3.x:   "Emit the `body:` of a DELETE operation as `requestBody`, like any other body — never drop it. Both 3.0 and 3.1 accept it structurally."
 
+  openapi_3_2_baseline:
+    openapi-3.2.0: "Render exactly like openapi-3.1.0 with `openapi: 3.2.0` — every `openapi-3.1.0` and `openapi-3.x` rule above applies unchanged. Only the rules that name 3.2 differ."
+
+  query_method:
+    pre-3.2:       "Drop the operation — the Path Item Object has no `query` field before OpenAPI 3.2 — together with the schemas only it references."
+    openapi-3.2.0: "Emit an operation with `method: QUERY` under the `query:` field of its path item, with its `body:` as `requestBody` like any other body."
+
+  urlencoded_body:
+    swagger-2.0:   "`in: formData` parameters with `consumes: [application/x-www-form-urlencoded]`."
+    openapi-3.x:   "`requestBody` with `application/x-www-form-urlencoded` content and an inline object schema listing `fields` as `properties`."
+
 
 # -----------------------------------------------------------------------------
 # Targets — where each rendered spec goes
@@ -116,9 +130,13 @@ targets:
     file: specs/v3.1-openapi.yaml
     spec_version: openapi-3.1.0
 
+  - id: v3_2
+    file: specs/v3.2-openapi.yaml
+    spec_version: openapi-3.2.0
+
 
 # =============================================================================
-# THE API — defined once. Rendered three times.
+# THE API — defined once. Rendered once per target.
 # =============================================================================
 api:
 
@@ -171,7 +189,7 @@ api:
     webhookDeliveries: Webhook delivery log
     audit:        Audit log
     system:       Health, ping, server info
-    webhooks:     Webhook event payloads (3.1 only)
+    webhooks:     Webhook event payloads (3.1+)
 
   # -------- Security --------
   security_schemes:
@@ -750,6 +768,26 @@ api:
         "201": { description: Created, content: { application/json: ref:Task } }
         "400": response_ref:BadRequest
 
+    # QUERY (rendering_rules.query_method): the safe, idempotent read that
+    # carries its input in the request body. Rendered only in the 3.2 target;
+    # Angular's HttpClient supports the method from 22.3
+    # (ng-openapi/ng-openapi#136).
+    - id: queryProjectTasks
+      method: QUERY
+      path: /projects/{projectId}/tasks
+      tags: [tasks]
+      summary: Query tasks in a project with a structured filter
+      description: "The filter travels in the request body, so it is not limited by URL length. Unlike a POST, the request is safe and idempotent: it can be retried and cached."
+      path_params: [param_ref:ProjectIdParam]
+      params:
+        - { in: query, name: cursor, schema: { type: string, nullable: true } }
+        - { in: query, name: limit,  schema: { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 } }
+      body: { required: true, content: { application/json: ref:TaskQuery } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:TaskCursorPage } }
+        "400": response_ref:BadRequest
+        "404": response_ref:NotFound
+
     - id: bulkCreateTasks
       method: POST
       path: /projects/{projectId}/tasks/bulk
@@ -1096,12 +1134,48 @@ api:
                 readCount: { type: integer, format: int32, minimum: 0 }
 
     # ===== Search =====
+    # QUERY with a multipart body: the file to compare against is the query.
+    - id: findSimilarAttachments
+      method: QUERY
+      path: /attachments/similar
+      tags: [attachments]
+      summary: Find attachments that resemble an uploaded file
+      body:
+        required: true
+        multipart:
+          required: [file]
+          fields:
+            file:       { type: file, description: "The file to compare against" }
+            maxResults: { type: integer, format: int32, default: 10, minimum: 1, maximum: 50 }
+            tags:       { type: array, items: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { type: array, items: ref:Attachment } } }
+        "413": { description: Payload too large, content: { application/json: ref:Error } }
+
     - id: search
       method: POST
       path: /search
       tags: [search]
       summary: Cross-entity search (returns polymorphic hits)
       body: { required: true, content: { application/json: ref:SearchRequest } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:SearchResponse } }
+
+    # The same search as a QUERY with a form-encoded body — the shape the
+    # QUERY method's own specification uses as its example.
+    - id: querySearch
+      method: QUERY
+      path: /search
+      tags: [search]
+      summary: Cross-entity search as a form-encoded QUERY
+      body:
+        required: true
+        urlencoded:
+          required: [q]
+          fields:
+            q:        { type: string, minLength: 1, maxLength: 500 }
+            entities: { type: array, items: ref:SearchEntityType }
+            limit:    { type: integer, format: int32, default: 25, minimum: 1, maximum: 100 }
       responses:
         "200": { description: OK, content: { application/json: ref:SearchResponse } }
 
@@ -1213,6 +1287,23 @@ api:
       responses:
         "200": { description: OK, content: { application/json: ref:AuditLogPage } }
 
+    # QUERY whose response is a file download, not JSON.
+    - id: exportAuditLog
+      method: QUERY
+      path: /audit-log/export
+      tags: [audit]
+      summary: Export the audit log entries that match a filter as CSV
+      security: [{ oauth2: [admin] }]
+      body: { required: true, content: { application/json: ref:AuditLogQuery } }
+      responses:
+        "200":
+          description: CSV export
+          headers:
+            Content-Disposition: { schema: { type: string }, description: "attachment; filename=\"audit-log.csv\"" }
+          content:
+            "text/csv": { type: string, format: binary }
+        "400": response_ref:BadRequest
+
     # ===== System =====
     - id: ping
       method: GET
@@ -1247,7 +1338,7 @@ api:
       responses:
         "200": { description: OK, content: { application/json: ref:ServerInfo } }
 
-  # -------- Webhooks (3.1 only) --------
+  # -------- Webhooks (3.1+) --------
   webhooks:
 
     taskCreated:
@@ -1913,6 +2004,19 @@ api:
         nextCursor: { type: string, nullable: true }
         prevCursor: { type: string, nullable: true }
 
+    # Body of the queryProjectTasks QUERY operation (3.2 target only).
+    TaskQuery:
+      type: object
+      description: "Structured task filter, sent as the body of a QUERY request."
+      properties:
+        text:            { type: string, maxLength: 500 }
+        statuses:        { type: array, items: ref:TaskStatus, uniqueItems: true }
+        priorities:      { type: array, items: ref:Priority, uniqueItems: true }
+        assigneeIds:     { type: array, items: { type: string, format: uuid } }
+        dueAfter:        { type: string, format: date, nullable: true }
+        dueBefore:       { type: string, format: date, nullable: true }
+        includeArchived: { type: boolean, default: false }
+
     TaskTree:
       type: object
       description: "Recursive node — a task with its child tasks inlined."
@@ -2491,6 +2595,16 @@ api:
           type: object
           additionalProperties: true
         occurredAt: { type: string, format: date-time, readOnly: true }
+
+    # Body of the exportAuditLog QUERY operation (3.2 target only).
+    AuditLogQuery:
+      type: object
+      required: [from, to]
+      properties:
+        from:     { type: string, format: date-time }
+        to:       { type: string, format: date-time }
+        actions:  { type: array, items: ref:AuditAction, uniqueItems: true }
+        actorIds: { type: array, items: { type: string, format: uuid } }
 
     AuditLogPage:
       type: object
