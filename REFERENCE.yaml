@@ -94,6 +94,10 @@ rendering_rules:
   enum_member_names:
     all:           "Emit `x-enumNames`, `x-enum-varnames` and a JSON-encoded enum `description` unchanged in every target."
 
+  delete_request_body:
+    swagger-2.0:   "Emit the `body:` of a DELETE operation as an `in: body` parameter, like any other body."
+    openapi-3.x:   "Emit the `body:` of a DELETE operation as `requestBody`, like any other body — never drop it. Both 3.0 and 3.1 accept it structurally."
+
 
 # -----------------------------------------------------------------------------
 # Targets — where each rendered spec goes
@@ -754,6 +758,22 @@ api:
       security: [{ oauth2: ["write:tasks"] }]
       path_params: [param_ref:ProjectIdParam]
       body: { required: true, content: { application/json: ref:BulkTaskCreate } }
+      responses:
+        "200": { description: OK, content: { application/json: ref:BulkOperationResult } }
+        "400": response_ref:BadRequest
+
+    # DELETE with a request body (rendering_rules.delete_request_body): a
+    # generated client has to send it — ng-openapi took the argument and sent
+    # an empty request (ng-openapi/ng-openapi#138).
+    - id: bulkDeleteTasks
+      method: DELETE
+      path: /projects/{projectId}/tasks/bulk
+      tags: [tasks]
+      summary: Delete many tasks in a single request
+      description: "The task ids travel in the request body. A body on DELETE is unusual but valid: RFC 9110 allows it once the server has said it supports one, and declaring it here is that statement."
+      security: [{ oauth2: ["write:tasks"] }]
+      path_params: [param_ref:ProjectIdParam]
+      body: { required: true, content: { application/json: ref:BulkTaskDelete } }
       responses:
         "200": { description: OK, content: { application/json: ref:BulkOperationResult } }
         "400": response_ref:BadRequest
@@ -1911,6 +1931,17 @@ api:
           maxItems: 500
           items: ref:TaskCreate
         stopOnError: { type: boolean, default: false }
+
+    BulkTaskDelete:
+      type: object
+      required: [taskIds]
+      properties:
+        taskIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { type: string, format: uuid }
+        permanent: { type: boolean, default: false, description: "Skip the trash and delete for good." }
 
     BulkOperationResult:
       type: object
